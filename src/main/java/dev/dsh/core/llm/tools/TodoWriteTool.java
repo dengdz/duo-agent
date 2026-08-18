@@ -50,14 +50,19 @@ public class TodoWriteTool {
 
     private ToolExecutionResult execute(Map<String, Object> args) {
         @SuppressWarnings("unchecked")
-        var items = (List<Map<String, String>>) args.get("todos");
+        var items = (List<Map<String, Object>>) args.get("todos");
         if (items == null) {
             return new ToolExecutionResult("错误：缺少 todos 参数");
         }
 
         todos.clear();
         for (var item : items) {
-            todos.add(new TodoItem(item.get("content"), item.get("status")));
+            var content = item.get("content");
+            var status = item.get("status");
+            todos.add(new TodoItem(
+                    content != null ? content.toString() : "",
+                    status != null ? status.toString() : "pending"
+            ));
         }
 
         var summary = "已写入 " + todos.size() + " 个任务";

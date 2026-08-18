@@ -233,6 +233,7 @@ class DeepSeekAdapterTest {
         for (var t : todos) {
             System.out.println("  - " + t.content() + " [" + t.status() + "]");
         }
+        assertFalse(todos.isEmpty(), "todo 应被实际记录（此前曾因参数解析 bug 记 0 条）");
 
         // 验证派生消息
         var messages = session.deriveMessages();

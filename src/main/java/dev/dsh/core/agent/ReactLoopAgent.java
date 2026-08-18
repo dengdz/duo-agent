@@ -297,26 +297,22 @@ public class ReactLoopAgent implements Agent {
         return null;
     }
 
-    /** 简单解析 JSON 参数。 */
-    private Map<String, Object> parseJsonArgs(String json) {
-        // 简化版：只处理 {"key": "value"} 格式
-        var result = new java.util.LinkedHashMap<String, Object>();
-        if (json == null || json.isBlank()) return result;
-        var trimmed = json.trim();
-        if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return result;
-
-        var inner = trimmed.substring(1, trimmed.length() - 1).trim();
-        if (inner.isEmpty()) return result;
-
-        // 按逗号分割（简化版，不支持嵌套逗号）
-        for (var pair : inner.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)")) {
-            var colon = pair.indexOf(':');
-            if (colon < 0) continue;
-            var key = pair.substring(0, colon).trim().replaceAll("^\"|\"$", "");
-            var value = pair.substring(colon + 1).trim().replaceAll("^\"|\"$", "");
-            result.put(key, value);
+    /** 解析 JSON 参数为嵌套结构。 */
+    Map<String, Object> parseJsonArgs(String json) {
+        if (json == null || json.isBlank()) return Map.of();
+        try {
+            var parsed = dev.dsh.util.JsonParser.parse(json);
+            if (parsed instanceof Map<?, ?> m) {
+                var result = new java.util.LinkedHashMap<String, Object>();
+                for (var e : m.entrySet()) {
+                    result.put(String.valueOf(e.getKey()), e.getValue());
+                }
+                return result;
+            }
+        } catch (IllegalArgumentException e) {
+            // 解析失败降级为空参数
         }
-        return result;
+        return Map.of();
     }
 
     /** 从 phase 中提取最后 turn 号。 */
