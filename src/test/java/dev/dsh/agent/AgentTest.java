@@ -1,0 +1,234 @@
+package dev.dsh.agent;
+
+import dev.dsh.agent.inbox.Inbox;
+import dev.dsh.llm.message.Message;
+import dev.dsh.llm.message.MessageFactory;
+import dev.dsh.llm.message.MessageSource;
+import dev.dsh.llm.types.ContentBlock;
+import dev.dsh.session.types.SessionId;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Agent 模块测试。
+ * <p>
+ * 覆盖：Inbox 操作、AgentRegistry 注册和查询、Agent 接口实现。
+ * </p>
+ */
+class AgentTest {
+
+    @Test
+    void inbox初始状态为空() {
+        var inbox = new Inbox();
+        assertFalse(inbox.hasPending());
+        assertTrue(inbox.nextTurn().isEmpty());
+        assertTrue(inbox.nextStep().isEmpty());
+    }
+
+    @Test
+    void inbox追加到nextStep() {
+        var inbox = new Inbox();
+        var msg = MessageFactory.createUserMessage(
+                List.of(new ContentBlock.Text("hello")),
+                new MessageSource.User()
+        );
+
+        inbox.append(InboxTarget.NEXT_STEP, msg);
+        assertTrue(inbox.hasPending());
+        assertEquals(1, inbox.nextStep().size());
+    }
+
+    @Test
+    void inbox追加到nextTurn() {
+        var inbox = new Inbox();
+        var msg = MessageFactory.createUserMessage(
+                List.of(new ContentBlock.Text("hello")),
+                new MessageSource.User()
+        );
+
+        inbox.append(InboxTarget.NEXT_TURN, msg);
+        assertTrue(inbox.hasPending());
+        assertEquals(1, inbox.nextTurn().size());
+    }
+
+    @Test
+    void inboxClaim取出nextStep全部和nextTurn一条() {
+        var inbox = new Inbox();
+
+        var stepMsg1 = MessageFactory.createUserMessage(
+                List.of(new ContentBlock.Text("step1")), new MessageSource.User()
+        );
+        var stepMsg2 = MessageFactory.createUserMessage(
+                List.of(new ContentBlock.Text("step2")), new MessageSource.User()
+        );
+        var turnMsg = MessageFactory.createUserMessage(
+                List.of(new ContentBlock.Text("turn")), new MessageSource.User()
+        );
+
+        inbox.append(InboxTarget.NEXT_STEP, stepMsg1);
+        inbox.append(InboxTarget.NEXT_STEP, stepMsg2);
+        inbox.append(InboxTarget.NEXT_TURN, turnMsg);
+
+        var claimed = inbox.claim(InboxTarget.NEXT_TURN);
+        assertEquals(3, claimed.size());
+        assertFalse(inbox.hasPending());
+    }
+
+    @Test
+    void inboxClaim只取nextStep时不移除nextTurn() {
+        var inbox = new Inbox();
+        var turnMsg = MessageFactory.createUserMessage(
+                List.of(new ContentBlock.Text("turn")), new MessageSource.User()
+        );
+        inbox.append(InboxTarget.NEXT_TURN, turnMsg);
+
+        var claimed = inbox.claim(InboxTarget.NEXT_STEP);
+        assertTrue(claimed.isEmpty());
+        assertTrue(inbox.hasPending());
+    }
+
+    @Test
+    void inboxClear清空所有消息() {
+        var inbox = new Inbox();
+        inbox.append(InboxTarget.NEXT_STEP, MessageFactory.createUserMessage(
+                List.of(new ContentBlock.Text("s")), new MessageSource.User()
+        ));
+        inbox.append(InboxTarget.NEXT_TURN, MessageFactory.createUserMessage(
+                List.of(new ContentBlock.Text("t")), new MessageSource.User()
+        ));
+
+        inbox.clear();
+        assertFalse(inbox.hasPending());
+    }
+
+    @Test
+    void inboxPrepend插入到开头() {
+        var inbox = new Inbox();
+        var first = MessageFactory.createUserMessage(
+                List.of(new ContentBlock.Text("first")), new MessageSource.User()
+        );
+        var second = MessageFactory.createUserMessage(
+                List.of(new ContentBlock.Text("second")), new MessageSource.User()
+        );
+
+        inbox.append(InboxTarget.NEXT_STEP, second);
+        inbox.prepend(InboxTarget.NEXT_STEP, first);
+
+        var claimed = inbox.claim(InboxTarget.NEXT_STEP);
+        assertEquals(2, claimed.size());
+        assertEquals("first", ((ContentBlock.Text) claimed.get(0).content().getFirst()).text());
+    }
+
+    @Test
+    void registry注册和查询Agent() {
+        var registry = new AgentRegistry(null);
+        var agent = new MockAgent(new SessionId("test-agent"));
+
+        registry.register(agent);
+        assertNotNull(registry.get(new SessionId("test-agent")));
+        assertEquals(1, registry.list().size());
+    }
+
+    @Test
+    void registry重复注册抛出异常() {
+        var registry = new AgentRegistry(null);
+        var agent = new MockAgent(new SessionId("dup"));
+
+        registry.register(agent);
+        assertThrows(IllegalArgumentException.class, () -> registry.register(agent));
+    }
+
+    @Test
+    void registry没有工厂时创建抛出异常() {
+        var registry = new AgentRegistry(null);
+        assertThrows(IllegalStateException.class, () -> {
+            registry.create(new CreateAgentOptions(
+                    new SessionId("test"), null, null, null
+            ));
+        });
+    }
+
+    @Test
+    void registry设置工厂后可以创建() throws Exception {
+        var registry = new AgentRegistry(null);
+        var created = new AtomicBoolean(false);
+
+        registry.setFactory(new AgentFactory() {
+            @Override
+            public AgentHandle createAgent(CreateAgentOptions options) {
+                created.set(true);
+                var agent = new MockAgent(options.sessionId());
+                registry.register(agent);
+                return new AgentHandle(agent, () -> {});
+            }
+
+            @Override
+            public AgentHandle resume(ResumeAgentOptions options) {
+                throw new UnsupportedOperationException();
+            }
+        });
+
+        var handle = registry.create(new CreateAgentOptions(
+                new SessionId("test"), null, null, null
+        ));
+        assertTrue(created.get());
+        assertNotNull(handle.agent());
+        assertNotNull(registry.get(new SessionId("test")));
+    }
+
+    // ---- MockAgent 实现 ----
+
+    static class MockAgent implements Agent {
+        private final SessionId id;
+        private final Inbox inbox = new Inbox();
+
+        MockAgent(SessionId id) {
+            this.id = id;
+        }
+
+        @Override
+        public SessionId id() { return id; }
+
+        @Override
+        public AgentOptions options() { return new AgentOptions(); }
+
+        @Override
+        public dev.dsh.session.Session session() { return null; }
+
+        @Override
+        public Inbox inbox() { return inbox; }
+
+        @Override
+        public AgentStatus status() { return AgentStatus.IDLE; }
+
+        @Override
+        public void cancel(AgentCancelCause cause, CancelOptions options) {}
+
+        @Override
+        public void whenIdle() {}
+
+        @Override
+        public void send(Message.UserMessage message, InboxTarget target, boolean wakeup) {
+            inbox.append(target, message);
+        }
+
+        @Override
+        public void followup(Message.UserMessage message) {
+            inbox.append(InboxTarget.NEXT_TURN, message);
+        }
+
+        @Override
+        public void steer(Message.UserMessage message) {
+            inbox.append(InboxTarget.NEXT_STEP, message);
+        }
+
+        @Override
+        public void inject(Message.UserMessage message) {
+            inbox.append(InboxTarget.NEXT_STEP, message);
+        }
+    }
+}
