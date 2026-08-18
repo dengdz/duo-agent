@@ -63,15 +63,14 @@ public class DeepSeekAdapter extends LlmAdapter {
                         }
                         try {
                             var textBuilder = new StringBuilder();
-                            response.body().forEach(line -> {
-                                if (!line.startsWith("data: ")) return;
-                                var data = line.substring(6).trim();
-                                if ("[DONE]".equals(data) || data.isEmpty()) return;
-                                parseChunk(data, textBuilder, callback);
-                            });
-                            // 发出 finish
-                            callback.onChunk(new StreamChunk.Finish(new FinishReason.Stop()));
-                            callback.onComplete();
+response.body().forEach(line -> {
+                        if (!line.startsWith("data: ")) return;
+                        var data = line.substring(6).trim();
+                        if ("[DONE]".equals(data) || data.isEmpty()) return;
+                        parseChunk(data, textBuilder, callback);
+                    });
+                    // 如果 SSE 流中没有 finish_reason，兜底发送
+                    callback.onComplete();
                         } catch (Exception e) {
                             callback.onError(e);
                         }
@@ -90,7 +89,7 @@ public class DeepSeekAdapter extends LlmAdapter {
 
     private void parseChunk(String json, StringBuilder textBuf, StreamCallback callback) {
         // 提取 choices[0].delta.content
-        var content = extractJsonString(json, "\"content\":\"");
+        var content = extractJsonString(json, "content");
         if (content != null && !content.isEmpty()) {
             if (firstChunk) {
                 callback.onChunk(new StreamChunk.BlockStart(0, "text"));
@@ -101,7 +100,7 @@ public class DeepSeekAdapter extends LlmAdapter {
         }
 
         // 提取 finish_reason
-        var finish = extractJsonString(json, "\"finish_reason\":\"");
+        var finish = extractJsonString(json, "finish_reason");
         if (finish != null && !finish.isEmpty() && !"null".equals(finish)) {
             if (!firstChunk) {
                 callback.onChunk(new StreamChunk.BlockEnd(0, new ContentBlock.Text(textBuf.toString())));
@@ -110,10 +109,10 @@ public class DeepSeekAdapter extends LlmAdapter {
         }
 
         // 提取 usage（通常在最后一条非 [DONE] 消息中）
-        var usageJson = extractJsonObject(json, "\"usage\":");
+        var usageJson = extractJsonObject(json, "usage");
         if (usageJson != null) {
-            var input = extractJsonInt(usageJson, "\"prompt_tokens\":");
-            var output = extractJsonInt(usageJson, "\"completion_tokens\":");
+            var input = extractJsonInt(usageJson, "prompt_tokens");
+            var output = extractJsonInt(usageJson, "completion_tokens");
             if (input != null && output != null) {
                 callback.onChunk(new StreamChunk.Usage(new TokenUsage(input, output)));
             }
@@ -122,18 +121,13 @@ public class DeepSeekAdapter extends LlmAdapter {
 
     // ---- JSON 辅助 ----
 
-    /** 提取 JSON 字符串值（处理 "key": "value" 和 "key":"value" 两种格式）。 */
-    private String extractJsonString(String json, String key) {
-        // 尝试 "key": "value" 和 "key":"value" 两种格式
-        var idx = json.indexOf(key);
-        if (idx < 0) {
-            // 尝试无空格版本
-            var noSpace = key.replace("\": \"", "\":\"");
-            idx = json.indexOf(noSpace);
-            if (idx < 0) return null;
-        }
-        var start = idx + key.length();
-        // 跳过可能存在的空格
+    /** 提取 JSON 字符串值。查找 "fieldName": "value" 格式。 */
+    private String extractJsonString(String json, String fieldName) {
+        var search = "\"" + fieldName + "\":";
+        var idx = json.indexOf(search);
+        if (idx < 0) return null;
+        var start = idx + search.length();
+        // 跳过空格
         while (start < json.length() && json.charAt(start) == ' ') start++;
         if (start >= json.length() || json.charAt(start) != '"') return null;
         start++; // 跳过开头的引号
@@ -152,10 +146,11 @@ public class DeepSeekAdapter extends LlmAdapter {
     }
 
     /** 提取 JSON 对象（从 key 后的第一个 { 到匹配的 }）。 */
-    private String extractJsonObject(String json, String key) {
-        var idx = json.indexOf(key);
+    private String extractJsonObject(String json, String fieldName) {
+        var search = "\"" + fieldName + "\":";
+        var idx = json.indexOf(search);
         if (idx < 0) return null;
-        var start = json.indexOf("{", idx + key.length());
+        var start = json.indexOf("{", idx + search.length());
         if (start < 0) return null;
         var depth = 1;
         var end = start + 1;
@@ -169,10 +164,11 @@ public class DeepSeekAdapter extends LlmAdapter {
     }
 
     /** 提取 JSON 整数值。 */
-    private Integer extractJsonInt(String json, String key) {
-        var idx = json.indexOf(key);
+    private Integer extractJsonInt(String json, String fieldName) {
+        var search = "\"" + fieldName + "\":";
+        var idx = json.indexOf(search);
         if (idx < 0) return null;
-        var start = idx + key.length();
+        var start = idx + search.length();
         while (start < json.length() && (json.charAt(start) == ' ' || json.charAt(start) == ':')) start++;
         var end = start;
         while (end < json.length() && Character.isDigit(json.charAt(end))) end++;
