@@ -19,7 +19,7 @@ import java.util.*;
  */
 public class Inbox {
 
-    private final Map<InboxTarget, List<Message.UserMessage>> state = new EnumMap<>(InboxTarget.class);
+    private final Map<InboxTarget, List<Message>> state = new EnumMap<>(InboxTarget.class);
 
     public Inbox() {
         state.put(InboxTarget.NEXT_TURN, new ArrayList<>());
@@ -27,12 +27,12 @@ public class Inbox {
     }
 
     /** 等待单个轮次的提示。 */
-    public List<Message.UserMessage> nextTurn() {
+    public List<Message> nextTurn() {
         return Collections.unmodifiableList(state.get(InboxTarget.NEXT_TURN));
     }
 
     /** 等待下一个 step 边界的输入。 */
-    public List<Message.UserMessage> nextStep() {
+    public List<Message> nextStep() {
         return Collections.unmodifiableList(state.get(InboxTarget.NEXT_STEP));
     }
 
@@ -55,7 +55,7 @@ public class Inbox {
      * @param target 是否也消耗一个排队的轮次
      * @return next-step 输入，后跟排队的轮次（如果请求了）
      */
-    public List<Message.UserMessage> claim(InboxTarget target) {
+    public List<Message> claim(InboxTarget target) {
         var claimed = new ArrayList<>(state.get(InboxTarget.NEXT_STEP));
         state.get(InboxTarget.NEXT_STEP).clear();
 
@@ -74,7 +74,7 @@ public class Inbox {
      * @param target 要扩展的待处理列表
      * @param message 要追加的消息
      */
-    public void append(InboxTarget target, Message.UserMessage message) {
+    public void append(InboxTarget target, Message message) {
         state.get(target).addLast(message);
     }
 
@@ -83,7 +83,7 @@ public class Inbox {
      * @param target 要扩展的待处理列表
      * @param message 要插入的消息
      */
-    public void prepend(InboxTarget target, Message.UserMessage message) {
+    public void prepend(InboxTarget target, Message message) {
         state.get(target).addFirst(message);
     }
 
@@ -93,10 +93,10 @@ public class Inbox {
      * @param newMessage 替换消息
      * @return 消息是否仍在待处理中
      */
-    public boolean replace(MessageId messageId, Message.UserMessage newMessage) {
+    public boolean replace(MessageId messageId, Message newMessage) {
         var location = locate(messageId);
         if (location == null) return false;
-        state.get(location.target).set(location.index, location.message);
+        state.get(location.target).set(location.index, newMessage);
         return true;
     }
 
@@ -124,5 +124,5 @@ public class Inbox {
         return null;
     }
 
-    private record MessageLocation(InboxTarget target, int index, Message.UserMessage message) {}
+    private record MessageLocation(InboxTarget target, int index, Message message) {}
 }

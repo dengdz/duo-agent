@@ -212,22 +212,22 @@ class AgentTest {
         public void whenIdle() {}
 
         @Override
-        public void send(Message.UserMessage message, InboxTarget target, boolean wakeup) {
+        public void send(Message message, InboxTarget target, boolean wakeup) {
             inbox.append(target, message);
         }
 
         @Override
-        public void followup(Message.UserMessage message) {
+        public void followup(Message message) {
             inbox.append(InboxTarget.NEXT_TURN, message);
         }
 
         @Override
-        public void steer(Message.UserMessage message) {
+        public void steer(Message message) {
             inbox.append(InboxTarget.NEXT_STEP, message);
         }
 
         @Override
-        public void inject(Message.UserMessage message) {
+        public void inject(Message message) {
             inbox.append(InboxTarget.NEXT_STEP, message);
         }
     }

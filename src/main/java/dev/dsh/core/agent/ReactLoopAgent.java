@@ -10,11 +10,14 @@ import dev.dsh.model.llm.MessageFactory;
 import dev.dsh.api.llm.LlmRuntime;
 import dev.dsh.api.llm.StreamCallback;
 import dev.dsh.api.llm.SystemPrompt;
+import dev.dsh.api.llm.ToolRegistry;
 import dev.dsh.model.llm.*;
 import dev.dsh.core.session.Session;
 import dev.dsh.model.session.*;
+import dev.dsh.util.CallId;
 
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -47,6 +50,7 @@ public class ReactLoopAgent implements Agent {
     private final Inbox inbox = new Inbox();
     private final LlmRuntime llmRuntime;
     private final SystemPrompt systemPrompt;
+    private final ToolRegistry toolRegistry;
 
     private volatile Phase phase;
     private volatile CompletableFuture<Void> activity = CompletableFuture.completedFuture(null);
@@ -55,12 +59,13 @@ public class ReactLoopAgent implements Agent {
     // ---- 构造 ----
 
     public ReactLoopAgent(SessionId id, AgentOptions options, Session session,
-                          LlmRuntime llmRuntime, SystemPrompt systemPrompt) {
+                          LlmRuntime llmRuntime, SystemPrompt systemPrompt, ToolRegistry toolRegistry) {
         this.id = id;
         this.options = options;
         this.session = session;
         this.llmRuntime = llmRuntime;
         this.systemPrompt = systemPrompt;
+        this.toolRegistry = toolRegistry;
         // 从 session 日志恢复最后 turn 号
         int lastTurn = 0;
         for (var e : session.events()) {
@@ -97,14 +102,14 @@ public class ReactLoopAgent implements Agent {
     }
 
     @Override
-    public void send(Message.UserMessage msg, InboxTarget target, boolean wakeup) {
+    public void send(Message msg, InboxTarget target, boolean wakeup) {
         inbox.append(target, msg);
         if (wakeup) wakeDriver();
     }
 
-    @Override public void followup(Message.UserMessage msg) { send(msg, InboxTarget.NEXT_TURN, true); }
-    @Override public void steer(Message.UserMessage msg) { send(msg, InboxTarget.NEXT_STEP, true); }
-    @Override public void inject(Message.UserMessage msg) { send(msg, InboxTarget.NEXT_STEP, false); }
+    @Override public void followup(Message msg) { send(msg, InboxTarget.NEXT_TURN, true); }
+    @Override public void steer(Message msg) { send(msg, InboxTarget.NEXT_STEP, true); }
+    @Override public void inject(Message msg) { send(msg, InboxTarget.NEXT_STEP, false); }
 
     // ---- 驱动 ----
 
@@ -165,7 +170,11 @@ public class ReactLoopAgent implements Agent {
                 session.append(new SessionEventStepStart(session.seq(), turn, step));
 
                 for (var msg : claimed) {
-                    session.append(new SessionEventUserMessage(session.seq(), msg, new SurfaceOp.Append()));
+                    if (msg instanceof Message.UserMessage userMsg) {
+                        session.append(new SessionEventUserMessage(
+                                session.seq(), userMsg, new SurfaceOp.Append()
+                        ));
+                    }
                 }
 
                 try {
@@ -250,7 +259,64 @@ public class ReactLoopAgent implements Agent {
         ));
 
         if (finish instanceof FinishReason.MaxTokens) return new TurnEndReason.MaxTokens();
-        return new TurnEndReason.Completed();
+
+        // 检查是否有工具调用
+        var toolCallBlocks = assembler.blocks().stream()
+                .filter(b -> b instanceof ContentBlock.ToolCall)
+                .map(b -> (ContentBlock.ToolCall) b)
+                .toList();
+
+        if (toolCallBlocks.isEmpty()) return new TurnEndReason.Completed();
+
+        // 执行工具调用
+        for (var tc : toolCallBlocks) {
+            session.append(new SessionEventToolCall(
+                    session.seq(), turn, step, tc.id(), tc.name(), tc.arguments()
+            ));
+
+            // 解析参数
+            Map<String, Object> args;
+            try {
+                args = parseJsonArgs(tc.arguments());
+            } catch (Exception e) {
+                args = Map.of();
+            }
+
+            var result = toolRegistry.execute(tc.name(), args);
+
+            var toolResultMsg = MessageFactory.createToolResultMessage(tc.id(), result.content(), result.isError());
+            session.append(new SessionEventToolResult(
+                    session.seq(), turn, step, toolResultMsg, new SurfaceOp.Append()
+            ));
+
+            // 将工具结果注入 inbox 作为 next-step 消息，驱动下一轮 step
+            inbox.append(InboxTarget.NEXT_STEP, toolResultMsg);
+        }
+
+        // 有工具调用时，返回 null 表示 step 继续
+        return null;
+    }
+
+    /** 简单解析 JSON 参数。 */
+    private Map<String, Object> parseJsonArgs(String json) {
+        // 简化版：只处理 {"key": "value"} 格式
+        var result = new java.util.LinkedHashMap<String, Object>();
+        if (json == null || json.isBlank()) return result;
+        var trimmed = json.trim();
+        if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return result;
+
+        var inner = trimmed.substring(1, trimmed.length() - 1).trim();
+        if (inner.isEmpty()) return result;
+
+        // 按逗号分割（简化版，不支持嵌套逗号）
+        for (var pair : inner.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)")) {
+            var colon = pair.indexOf(':');
+            if (colon < 0) continue;
+            var key = pair.substring(0, colon).trim().replaceAll("^\"|\"$", "");
+            var value = pair.substring(colon + 1).trim().replaceAll("^\"|\"$", "");
+            result.put(key, value);
+        }
+        return result;
     }
 
     /** 从 phase 中提取最后 turn 号。 */

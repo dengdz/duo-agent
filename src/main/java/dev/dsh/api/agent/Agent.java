@@ -51,21 +51,21 @@ public interface Agent {
      * @param target 首选的 next-turn 或 next-step inbox 边界
      * @param wakeup 是否可能唤醒驱动
      */
-    void send(Message.UserMessage message, InboxTarget target, boolean wakeup);
+    void send(Message message, InboxTarget target, boolean wakeup);
 
     /**
      * 排队一个普通的后续轮次并唤醒驱动。
      */
-    void followup(Message.UserMessage message);
+    void followup(Message message);
 
     /**
      * 为最近的 step 提交 steering。
      * 空闲的驱动会启动一个 turn；正在运行的驱动会在下一个 step 边界消费它。
      */
-    void steer(Message.UserMessage message);
+    void steer(Message message);
 
     /**
      * 为下一个 pre-step 排队模型可见上下文，但不唤醒驱动。
      */
-    void inject(Message.UserMessage message);
+    void inject(Message message);
 }

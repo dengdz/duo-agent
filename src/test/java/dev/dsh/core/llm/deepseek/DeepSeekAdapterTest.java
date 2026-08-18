@@ -104,7 +104,7 @@ class DeepSeekAdapterTest {
                 new dev.dsh.api.agent.AgentOptions("deepseek-official", MODEL, null),
                 session,
                 llm,
-                new SystemPromptImpl("", false)
+                new SystemPromptImpl("", false), new dev.dsh.core.llm.ToolRegistryImpl()
         );
 
         var userMsg = MessageFactory.createUserMessage(

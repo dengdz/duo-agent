@@ -47,7 +47,7 @@ class ReactLoopAgentTest {
                 new AgentOptions("mock-echo", "mock-model", null),
                 session,
                 llm,
-                new SystemPromptImpl("", false)
+                new SystemPromptImpl("", false), new dev.dsh.core.llm.ToolRegistryImpl()
         );
 
         // 发送一条消息
@@ -120,7 +120,7 @@ class ReactLoopAgentTest {
                 new AgentOptions("mock-echo", "mock-model", null),
                 session,
                 llm,
-                new SystemPromptImpl("", false)
+                new SystemPromptImpl("", false), new dev.dsh.core.llm.ToolRegistryImpl()
         );
 
         // 第一轮
