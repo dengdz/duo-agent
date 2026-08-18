@@ -42,6 +42,8 @@ public class DeepSeekAdapter extends LlmAdapter {
             callback.onError(new IllegalStateException(API_KEY_ENV + " 未设置"));
             return;
         }
+        // 每次流式调用前重置解析状态，防止同一适配器实例复用时状态泄漏
+        resetParserState();
         try {
             var requestBody = buildRequest(options);
             var request = HttpRequest.newBuilder()
@@ -84,10 +86,24 @@ response.body().forEach(line -> {
         }
     }
 
-    /** 解析单个 SSE data 行，提取文本 delta 并发射。 */
+    /** 解析单个 SSE data 行，提取文本 delta、工具调用 delta 并发射。 */
     private boolean firstChunk = true;
+    private boolean hasToolCalls = false;
+    private boolean toolCallBlockStarted = false;
+    private String currentToolCallId;
+    private String currentToolCallName;
+    private final StringBuilder currentToolCallArgs = new StringBuilder();
 
-    private void parseChunk(String json, StringBuilder textBuf, StreamCallback callback) {
+    private void resetParserState() {
+        firstChunk = true;
+        hasToolCalls = false;
+        toolCallBlockStarted = false;
+        currentToolCallId = null;
+        currentToolCallName = null;
+        currentToolCallArgs.setLength(0);
+    }
+
+    void parseChunk(String json, StringBuilder textBuf, StreamCallback callback) {
         // 提取 choices[0].delta.content
         var content = extractJsonString(json, "content");
         if (content != null && !content.isEmpty()) {
@@ -99,10 +115,53 @@ response.body().forEach(line -> {
             callback.onChunk(new StreamChunk.TextDelta(0, content));
         }
 
-        // 提取 finish_reason
+        // 提取工具调用：仅在 JSON 包含 "tool_calls" 时解析
+        if (json.contains("\"tool_calls\"")) {
+            var toolCallId = extractToolCallId(json);
+            var toolCallName = extractToolCallFunctionName(json);
+            var toolCallArgs = extractToolCallArguments(json);
+
+            // 首次收到工具调用 → 关闭文本块（如果有），标记 hasToolCalls
+            if (!hasToolCalls) {
+                if (textBuf.length() > 0) {
+                    callback.onChunk(new StreamChunk.BlockEnd(0, new ContentBlock.Text(textBuf.toString())));
+                }
+                hasToolCalls = true;
+            }
+
+            // 首次收到工具调用 id → 发出 BlockStart 并记录名称
+            if (toolCallId != null) {
+                currentToolCallId = toolCallId;
+                currentToolCallName = toolCallName != null ? toolCallName : "";
+                currentToolCallArgs.setLength(0);
+                if (!toolCallBlockStarted) {
+                    callback.onChunk(new StreamChunk.BlockStart(1, "tool-call"));
+                    toolCallBlockStarted = true;
+                }
+            }
+
+            // 累加参数并实时发射 ToolCallDelta
+            if (toolCallArgs != null) {
+                currentToolCallArgs.append(toolCallArgs);
+                if (currentToolCallId != null) {
+                    callback.onChunk(new StreamChunk.ToolCallDelta(
+                            1, new dev.dsh.util.CallId(currentToolCallId),
+                            currentToolCallName, toolCallArgs));
+                }
+            }
+        }
+
+        // 提取 finish_reason — 此时关闭工具调用块
         var finish = extractJsonString(json, "finish_reason");
         if (finish != null && !finish.isEmpty() && !"null".equals(finish)) {
-            if (!firstChunk) {
+            if (hasToolCalls && currentToolCallId != null) {
+                var id = new dev.dsh.util.CallId(currentToolCallId);
+                callback.onChunk(new StreamChunk.ToolCallDelta(
+                        1, id, currentToolCallName, currentToolCallArgs.toString()
+                ));
+                callback.onChunk(new StreamChunk.BlockEnd(1,
+                        new ContentBlock.ToolCall(id, currentToolCallName, currentToolCallArgs.toString())));
+            } else if (!firstChunk) {
                 callback.onChunk(new StreamChunk.BlockEnd(0, new ContentBlock.Text(textBuf.toString())));
             }
             callback.onChunk(new StreamChunk.Finish(toFinishReason(finish)));
@@ -120,6 +179,61 @@ response.body().forEach(line -> {
     }
 
     // ---- JSON 辅助 ----
+
+    /** 从 choices[0].delta.tool_calls[0] 中提取工具调用 id。 */
+    private String extractToolCallId(String json) {
+        var arrIdx = json.indexOf("\"tool_calls\"");
+        if (arrIdx < 0) return null;
+        var objStart = json.indexOf("{", arrIdx);
+        if (objStart < 0) return null;
+        var objEnd = findMatchingBrace(json, objStart);
+        if (objEnd < 0) return null;
+        return extractJsonString(json.substring(objStart, objEnd + 1), "id");
+    }
+
+    /** 提取第一个 tool_call 的 function 对象字符串。 */
+    private String extractToolCallFunctionObject(String json) {
+        var arrIdx = json.indexOf("\"tool_calls\"");
+        if (arrIdx < 0) return null;
+        var funcIdx = json.indexOf("\"function\"", arrIdx);
+        if (funcIdx < 0) return null;
+        var objStart = json.indexOf("{", funcIdx);
+        if (objStart < 0) return null;
+        var objEnd = findMatchingBrace(json, objStart);
+        if (objEnd < 0) return null;
+        return json.substring(objStart, objEnd + 1);
+    }
+
+    /** 从第一个 tool_call.function 中提取工具名。 */
+    private String extractToolCallFunctionName(String json) {
+        var funcObj = extractToolCallFunctionObject(json);
+        return funcObj != null ? extractJsonString(funcObj, "name") : null;
+    }
+
+    /** 从第一个 tool_call.function 中提取参数增量字符串。 */
+    private String extractToolCallArguments(String json) {
+        var funcObj = extractToolCallFunctionObject(json);
+        return funcObj != null ? extractJsonString(funcObj, "arguments") : null;
+    }
+
+    /** 查找与指定开括号匹配的同层闭括号位置（跳过字符串内容）。 */
+    private int findMatchingBrace(String json, int openIdx) {
+        var depth = 1;
+        var inString = false;
+        var i = openIdx + 1;
+        while (depth > 0 && i < json.length()) {
+            var c = json.charAt(i);
+            if (c == '\\') { i += 2; continue; }
+            if (c == '"') {
+                inString = !inString;
+            } else if (!inString) {
+                if (c == '{') depth++;
+                else if (c == '}') depth--;
+            }
+            i++;
+        }
+        return depth == 0 ? i - 1 : -1;
+    }
 
     /** 提取 JSON 字符串值。查找 "fieldName": "value" 格式。 */
     private String extractJsonString(String json, String fieldName) {
@@ -231,6 +345,21 @@ response.body().forEach(line -> {
         sb.append(String.join(",\n", messages));
         sb.append("\n    ],\n");
 
+        // tools
+        if (options.tools() != null && !options.tools().isEmpty()) {
+            sb.append("  \"tools\": [\n");
+            var toolEntries = new ArrayList<String>();
+            for (var tool : options.tools()) {
+                toolEntries.add("    {\"type\": \"function\", \"function\": {"
+                        + "\"name\": \"" + escapeJson(tool.name()) + "\", "
+                        + "\"description\": \"" + escapeJson(tool.description()) + "\", "
+                        + "\"parameters\": " + toJson(tool.parameters())
+                        + "}}");
+            }
+            sb.append(String.join(",\n", toolEntries));
+            sb.append("\n  ],\n");
+        }
+
         if (options.temperature() != null) {
             sb.append("  \"temperature\": ").append(options.temperature()).append(",\n");
         }
@@ -261,6 +390,38 @@ response.body().forEach(line -> {
                 .replace("\n", "\\n")
                 .replace("\r", "\\r")
                 .replace("\t", "\\t");
+    }
+
+    /** 将 Map 序列化为 JSON 字符串。 */
+    @SuppressWarnings("unchecked")
+    private String toJson(Object value) {
+        if (value == null) return "null";
+        if (value instanceof String s) return "\"" + escapeJson(s) + "\"";
+        if (value instanceof Number || value instanceof Boolean) return value.toString();
+        if (value instanceof Map<?, ?> map) {
+            var sb = new StringBuilder("{");
+            var first = true;
+            for (var entry : map.entrySet()) {
+                if (!first) sb.append(", ");
+                first = false;
+                sb.append("\"").append(escapeJson(entry.getKey().toString())).append("\": ");
+                sb.append(toJson(entry.getValue()));
+            }
+            sb.append("}");
+            return sb.toString();
+        }
+        if (value instanceof Iterable<?> iter) {
+            var sb = new StringBuilder("[");
+            var first = true;
+            for (var item : iter) {
+                if (!first) sb.append(", ");
+                first = false;
+                sb.append(toJson(item));
+            }
+            sb.append("]");
+            return sb.toString();
+        }
+        return "\"" + escapeJson(value.toString()) + "\"";
     }
 
     private String getEnvOrDefault(String name, String defaultValue) {
