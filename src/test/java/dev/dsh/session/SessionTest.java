@@ -24,53 +24,53 @@ import static org.junit.jupiter.api.Assertions.*;
 class SessionTest {
 
     @Test
-    void 追加事件增加日志长度() {
+    void shouldAppendEventIncreaseSeq() {
         var session = new Session(new SessionId("test"));
 
         assertEquals(0, session.seq());
 
-        session.append(new SessionEvent.TurnStart(0, 1));
+        session.append(new SessionEventTurnStart(0, 1));
         assertEquals(1, session.seq());
 
-        session.append(new SessionEvent.TurnEnd(1, 1, new TurnEndReason.Completed()));
+        session.append(new SessionEventTurnEnd(1, 1, new TurnEndReason.Completed()));
         assertEquals(2, session.seq());
     }
 
     @Test
-    void 事件快照不可变() {
+    void shouldProvideImmutableEventSnapshot() {
         var session = new Session(new SessionId("test"));
-        session.append(new SessionEvent.TurnStart(0, 1));
+        session.append(new SessionEventTurnStart(0, 1));
 
         var events = session.events();
         assertEquals(1, events.size());
 
         // 追加新事件后，旧快照不变
-        session.append(new SessionEvent.TurnEnd(1, 1, new TurnEndReason.Completed()));
+        session.append(new SessionEventTurnEnd(1, 1, new TurnEndReason.Completed()));
         assertEquals(1, events.size());  // 旧快照
         assertEquals(2, session.events().size());  // 新快照
     }
 
     @Test
-    void seq连续递增() {
+    void shouldMaintainContiguousSeq() {
         var session = new Session(new SessionId("test"));
 
         for (int i = 0; i < 5; i++) {
-            var event = session.append(new SessionEvent.StepStart(i, 1, 1));
+            var event = session.append(new SessionEventStepStart(i, 1, 1));
             assertEquals(i, event.seq());
         }
         assertEquals(5, session.seq());
     }
 
     @Test
-    void 表面事件非表面事件区分() {
+    void shouldDistinguishSurfaceAndNonSurfaceEvents() {
         var session = new Session(new SessionId("test"));
 
         // 非表面事件
-        session.append(new SessionEvent.TurnStart(0, 1));
-        session.append(new SessionEvent.StepStart(1, 1, 1));
+        session.append(new SessionEventTurnStart(0, 1));
+        session.append(new SessionEventStepStart(1, 1, 1));
 
         // 表面事件（带 surfaceOp）
-        session.append(new SessionEvent.UserMessage(
+        session.append(new SessionEventUserMessage(
                 2,
                 MessageFactory.createUserMessage(
                         List.of(new ContentBlock.Text("hello")),
@@ -85,29 +85,29 @@ class SessionTest {
     }
 
     @Test
-    void deriveMessages生成消息历史() {
+    void shouldDeriveMessageHistory() {
         var session = new Session(new SessionId("test"));
 
         // turn 1
-        session.append(new SessionEvent.TurnStart(0, 1));
+        session.append(new SessionEventTurnStart(0, 1));
 
         // 用户消息
         var userMsg = MessageFactory.createUserMessage(
                 List.of(new ContentBlock.Text("hello")),
                 new MessageSource.User()
         );
-        session.append(new SessionEvent.UserMessage(1, userMsg, new SurfaceOp.Append()));
+        session.append(new SessionEventUserMessage(1, userMsg, new SurfaceOp.Append()));
 
         // 助手消息
         var assistantMsg = MessageFactory.createAssistantMessage(
                 List.of(new ContentBlock.Text("Hi there!")),
                 "deepseek", "v4"
         );
-        session.append(new SessionEvent.AssistantMessage(
+        session.append(new SessionEventAssistantMessage(
                 2, 1, 1, assistantMsg, new SurfaceOp.Append(), new TokenUsage(10, 5)
         ));
 
-        session.append(new SessionEvent.TurnEnd(3, 1, new TurnEndReason.Completed()));
+        session.append(new SessionEventTurnEnd(3, 1, new TurnEndReason.Completed()));
 
         // 派生消息
         var messages = session.deriveMessages();
@@ -117,21 +117,21 @@ class SessionTest {
     }
 
     @Test
-    void 空内容的助手消息被跳过() {
+    void shouldSkipEmptyAssistantMessage() {
         var session = new Session(new SessionId("test"));
 
         var userMsg = MessageFactory.createUserMessage(
                 List.of(new ContentBlock.Text("hello")),
                 new MessageSource.User()
         );
-        session.append(new SessionEvent.UserMessage(0, userMsg, new SurfaceOp.Append()));
+        session.append(new SessionEventUserMessage(0, userMsg, new SurfaceOp.Append()));
 
         // 空内容的助手消息（仅用于承载 usage）
         var emptyAssistant = MessageFactory.createAssistantMessage(
                 List.of(),
                 "deepseek", "v4"
         );
-        session.append(new SessionEvent.AssistantMessage(
+        session.append(new SessionEventAssistantMessage(
                 1, 1, 1, emptyAssistant, new SurfaceOp.Append(), new TokenUsage(10, 5)
         ));
 
@@ -140,13 +140,13 @@ class SessionTest {
     }
 
     @Test
-    void requestHeader折叠() {
+    void shouldFoldRequestHeader() {
         var session = new Session(new SessionId("test"));
 
         assertNull(session.requestHeader());
 
         var header = new EpochHeader("deepseek", "v4", null, null, null, null);
-        session.append(new SessionEvent.RequestHeader(0, header, "initial"));
+        session.append(new SessionEventRequestHeader(0, header, "initial"));
 
         var folded = session.requestHeader();
         assertNotNull(folded);
@@ -155,7 +155,7 @@ class SessionTest {
     }
 
     @Test
-    void 表面替换更新节点() {
+    void shouldReplaceSurfaceNodes() {
         var session = new Session(new SessionId("test"));
 
         // 追加两条用户消息
@@ -163,13 +163,13 @@ class SessionTest {
                 List.of(new ContentBlock.Text("first")),
                 new MessageSource.User()
         );
-        var e1 = session.append(new SessionEvent.UserMessage(0, msg1, new SurfaceOp.Append()));
+        var e1 = session.append(new SessionEventUserMessage(0, msg1, new SurfaceOp.Append()));
 
         var msg2 = MessageFactory.createUserMessage(
                 List.of(new ContentBlock.Text("second")),
                 new MessageSource.User()
         );
-        var e2 = session.append(new SessionEvent.UserMessage(1, msg2, new SurfaceOp.Append()));
+        var e2 = session.append(new SessionEventUserMessage(1, msg2, new SurfaceOp.Append()));
 
         assertEquals(2, session.surface().nodes().size());
 
@@ -178,7 +178,7 @@ class SessionTest {
                 List.of(new ContentBlock.Text("replaced")),
                 new MessageSource.User()
         );
-        session.append(new SessionEvent.UserMessage(
+        session.append(new SessionEventUserMessage(
                 2, msg3, new SurfaceOp.Replace(0, 0)
         ));
 
@@ -189,18 +189,18 @@ class SessionTest {
     }
 
     @Test
-    void fork创建子会话() {
+    void shouldForkChildSession() {
         var store = new SessionStore();
         var parent = store.create(new SessionId("parent"));
 
         // 追加一些事件
-        parent.append(new SessionEvent.TurnStart(0, 1));
+        parent.append(new SessionEventTurnStart(0, 1));
         var userMsg = MessageFactory.createUserMessage(
                 List.of(new ContentBlock.Text("hello")),
                 new MessageSource.User()
         );
-        parent.append(new SessionEvent.UserMessage(1, userMsg, new SurfaceOp.Append()));
-        parent.append(new SessionEvent.TurnEnd(2, 1, new TurnEndReason.Completed()));
+        parent.append(new SessionEventUserMessage(1, userMsg, new SurfaceOp.Append()));
+        parent.append(new SessionEventTurnEnd(2, 1, new TurnEndReason.Completed()));
 
         // fork
         var child = store.fork(parent, null, new SessionId("child"));
@@ -212,10 +212,10 @@ class SessionTest {
     }
 
     @Test
-    void 非表面事件不能携带surfaceOp() {
+    void shouldRejectSurfaceOpOnNonSurfaceEvent() {
         var session = new Session(new SessionId("test"));
         // 构造一个带 surfaceOp 的 turn/start 事件
-        var badEvent = new SessionEvent.TurnStart(
+        var badEvent = new SessionEventTurnStart(
                 0, System.currentTimeMillis(), false,
                 new SurfaceOp.Append(), null, 1
         );

@@ -58,7 +58,8 @@ public class Session {
                 var event = seed[i];
                 if (event.seq() != i) {
                     throw new IllegalArgumentException(
-                            "种子事件索引 " + i + " 的 seq 为 " + event.seq() + "（期望 " + i + "）；种子必须从 0 开始连续"
+                            "种子事件索引 " + i + " 的 seq 为 " + event.seq()
+                                    + "（期望 " + i + "）；种子必须从 0 开始连续"
                     );
                 }
                 surfaceManager.validateNext(event);
@@ -80,7 +81,7 @@ public class Session {
         if (seed != null && seed.length > 0) {
             var last = log.isEmpty() ? null : log.getLast();
             if (last == null || !"session/end-seed".equals(last.type())) {
-                append(new SessionEvent.SessionEndSeed(log.size()));
+                append(new SessionEventSessionEndSeed(log.size()));
             }
         }
     }
@@ -190,12 +191,12 @@ public class Session {
      */
     static Message deriveEventMessage(SessionEvent event) {
         return switch (event) {
-            case SessionEvent.UserMessage ev -> ev.message();
-            case SessionEvent.AssistantMessage ev -> {
+            case SessionEventUserMessage ev -> ev.message();
+            case SessionEventAssistantMessage ev -> {
                 if (ev.message().content().isEmpty()) yield null;
                 yield ev.message();
             }
-            case SessionEvent.ToolResult ev -> ev.message();
+            case SessionEventToolResult ev -> ev.message();
             default -> null;
         };
     }
@@ -209,7 +210,7 @@ public class Session {
         if (headerFoldSeq < log.size()) {
             for (int i = headerFoldSeq; i < log.size(); i++) {
                 var event = log.get(i);
-                if (event instanceof SessionEvent.RequestHeader rh) {
+                if (event instanceof SessionEventRequestHeader rh) {
                     headerFold = rh.header();
                 }
             }

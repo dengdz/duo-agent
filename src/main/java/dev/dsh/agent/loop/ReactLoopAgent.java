@@ -2,6 +2,8 @@ package dev.dsh.agent.loop;
 
 import dev.dsh.agent.*;
 import dev.dsh.agent.inbox.Inbox;
+import dev.dsh.exception.AgentLoopException;
+import dev.dsh.exception.LlmException;
 import dev.dsh.llm.assembler.BlockAssembler;
 import dev.dsh.llm.message.Message;
 import dev.dsh.llm.message.MessageFactory;
@@ -58,7 +60,7 @@ public class ReactLoopAgent implements Agent {
         // 从 session 日志恢复最后 turn 号
         int lastTurn = 0;
         for (var e : session.events()) {
-            if (e instanceof SessionEvent.TurnStart ts) lastTurn = ts.turn();
+            if (e instanceof SessionEventTurnStart ts) lastTurn = ts.turn();
         }
         this.phase = new Idle(lastTurn);
     }
@@ -116,14 +118,14 @@ public class ReactLoopAgent implements Agent {
             try {
                 runLoop();
                 fut.complete(null);
-            } catch (Exception e) {
+            } catch (AgentLoopException e) {
                 fut.completeExceptionally(e);
             }
         });
     }
 
     /** 驱动主循环：反复开 turn。 */
-    private void runLoop() throws Exception {
+    private void runLoop() throws AgentLoopException {
         try {
             while (phase instanceof Running r && !r.cancelled) {
                 if (!turn(r)) break;
@@ -139,9 +141,9 @@ public class ReactLoopAgent implements Agent {
     }
 
     /** 执行一轮对话。返回 true 表示还有待办需要继续。 */
-    private boolean turn(Running r) throws Exception {
+    private boolean turn(Running r) throws AgentLoopException {
         int turn = r.turn;
-        session.append(new SessionEvent.TurnStart(session.seq(), turn));
+        session.append(new SessionEventTurnStart(session.seq(), turn));
         phase = new Running(turn, 0, false);
 
         TurnEndReason reason = null;
@@ -156,36 +158,39 @@ public class ReactLoopAgent implements Agent {
                 if (claimed.isEmpty()) { reason = new TurnEndReason.Completed(); break; }
 
                 phase = new Running(turn, step, false);
-                session.append(new SessionEvent.StepStart(session.seq(), turn, step));
+                session.append(new SessionEventStepStart(session.seq(), turn, step));
 
                 for (var msg : claimed) {
-                    session.append(new SessionEvent.UserMessage(session.seq(), msg, new SurfaceOp.Append()));
+                    session.append(new SessionEventUserMessage(session.seq(), msg, new SurfaceOp.Append()));
                 }
 
                 try {
                     var stepEnd = executeStep(turn, step);
                     if (!(reason instanceof TurnEndReason.MaxTokens)) reason = stepEnd;
                 } finally {
-                    session.append(new SessionEvent.StepEnd(session.seq(), turn, step));
+                    session.append(new SessionEventStepEnd(session.seq(), turn, step));
                 }
 
                 if (reason != null && inbox.nextStep().isEmpty()) break;
                 target = InboxTarget.NEXT_STEP;
             }
-        } catch (Exception e) {
+        } catch (AgentLoopException e) {
             if (reason == null) {
                 reason = new TurnEndReason.Error(new LlmFailure(e.getMessage(), "UNKNOWN"));
             }
             throw e;
         } finally {
-            session.append(new SessionEvent.TurnEnd(session.seq(), turn, reason != null ? reason : new TurnEndReason.Completed()));
+            session.append(new SessionEventTurnEnd(
+                    session.seq(), turn,
+                    reason != null ? reason : new TurnEndReason.Completed()
+            ));
         }
 
         return inbox.hasPending();
     }
 
     /** 执行一次模型调用。返回 step 结束原因。 */
-    private TurnEndReason executeStep(int turn, int step) throws Exception {
+    private TurnEndReason executeStep(int turn, int step) throws AgentLoopException {
         var provider = options.provider() != null ? options.provider() : "mock-echo";
         var model = options.model() != null ? options.model() : "mock-model";
         var messages = session.deriveMessages();
@@ -200,7 +205,7 @@ public class ReactLoopAgent implements Agent {
             @Override
             public void onChunk(StreamChunk chunk) {
                 int seq = session.seq();
-                session.append(new SessionEvent.AssistantChunk(seq, turn, step, chunk));
+                session.append(new SessionEventAssistantChunk(seq, turn, step, chunk));
                 chunkSeqs.add(seq);
                 assembler.push(chunk);
             }
@@ -210,16 +215,25 @@ public class ReactLoopAgent implements Agent {
             public void onError(Throwable err) { errorRef.set(err); barrier.completeExceptionally(err); }
         });
 
-        barrier.get(60, TimeUnit.SECONDS);
-        if (errorRef.get() != null) throw new Exception("LLM 调用失败", errorRef.get());
+        try {
+            barrier.get(60, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AgentLoopException("LLM 调用被中断", e);
+        } catch (ExecutionException e) {
+            throw new AgentLoopException("LLM 调用失败", e.getCause());
+        } catch (java.util.concurrent.TimeoutException e) {
+            throw new AgentLoopException("LLM 调用超时", e);
+        }
+        if (errorRef.get() != null) throw new AgentLoopException("LLM 调用失败", errorRef.get());
 
         var finish = assembler.finish();
         if (finish instanceof FinishReason.Aborted || finish instanceof FinishReason.Error) {
-            throw new Exception("LLM 异常结束");
+            throw new AgentLoopException("LLM 异常结束");
         }
 
         var assistantMsg = MessageFactory.createAssistantMessage(assembler.blocks(), provider, model);
-        session.append(new SessionEvent.AssistantMessage(
+        session.append(new SessionEventAssistantMessage(
                 session.seq(), turn, step, assistantMsg,
                 new SurfaceOp.Append(), assembler.usage().orElse(null)
         ));

@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class AgentTest {
 
     @Test
-    void inbox初始状态为空() {
+    void inboxShouldBeEmptyInitially() {
         var inbox = new Inbox();
         assertFalse(inbox.hasPending());
         assertTrue(inbox.nextTurn().isEmpty());
@@ -30,7 +30,7 @@ class AgentTest {
     }
 
     @Test
-    void inbox追加到nextStep() {
+    void inboxShouldAppendToNextStep() {
         var inbox = new Inbox();
         var msg = MessageFactory.createUserMessage(
                 List.of(new ContentBlock.Text("hello")),
@@ -43,7 +43,7 @@ class AgentTest {
     }
 
     @Test
-    void inbox追加到nextTurn() {
+    void inboxShouldAppendToNextTurn() {
         var inbox = new Inbox();
         var msg = MessageFactory.createUserMessage(
                 List.of(new ContentBlock.Text("hello")),
@@ -56,7 +56,7 @@ class AgentTest {
     }
 
     @Test
-    void inboxClaim取出nextStep全部和nextTurn一条() {
+    void inboxClaimShouldDrainAllNextStepAndOneNextTurn() {
         var inbox = new Inbox();
 
         var stepMsg1 = MessageFactory.createUserMessage(
@@ -79,7 +79,7 @@ class AgentTest {
     }
 
     @Test
-    void inboxClaim只取nextStep时不移除nextTurn() {
+    void inboxClaimWithNextStepShouldNotTouchNextTurn() {
         var inbox = new Inbox();
         var turnMsg = MessageFactory.createUserMessage(
                 List.of(new ContentBlock.Text("turn")), new MessageSource.User()
@@ -92,7 +92,7 @@ class AgentTest {
     }
 
     @Test
-    void inboxClear清空所有消息() {
+    void inboxClearShouldRemoveAllMessages() {
         var inbox = new Inbox();
         inbox.append(InboxTarget.NEXT_STEP, MessageFactory.createUserMessage(
                 List.of(new ContentBlock.Text("s")), new MessageSource.User()
@@ -106,7 +106,7 @@ class AgentTest {
     }
 
     @Test
-    void inboxPrepend插入到开头() {
+    void inboxPrependShouldInsertAtHead() {
         var inbox = new Inbox();
         var first = MessageFactory.createUserMessage(
                 List.of(new ContentBlock.Text("first")), new MessageSource.User()
@@ -124,7 +124,7 @@ class AgentTest {
     }
 
     @Test
-    void registry注册和查询Agent() {
+    void registryShouldRegisterAndLookupAgent() {
         var registry = new AgentRegistry(null);
         var agent = new MockAgent(new SessionId("test-agent"));
 
@@ -134,7 +134,7 @@ class AgentTest {
     }
 
     @Test
-    void registry重复注册抛出异常() {
+    void registryShouldThrowOnDuplicateRegister() {
         var registry = new AgentRegistry(null);
         var agent = new MockAgent(new SessionId("dup"));
 
@@ -143,7 +143,7 @@ class AgentTest {
     }
 
     @Test
-    void registry没有工厂时创建抛出异常() {
+    void registryShouldThrowWithoutFactory() {
         var registry = new AgentRegistry(null);
         assertThrows(IllegalStateException.class, () -> {
             registry.create(new CreateAgentOptions(
@@ -153,7 +153,7 @@ class AgentTest {
     }
 
     @Test
-    void registry设置工厂后可以创建() throws Exception {
+    void registryShouldCreateWithFactory() throws Exception {
         var registry = new AgentRegistry(null);
         var created = new AtomicBoolean(false);
 

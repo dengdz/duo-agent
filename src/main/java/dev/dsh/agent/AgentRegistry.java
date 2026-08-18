@@ -1,6 +1,7 @@
 package dev.dsh.agent;
 
 import dev.dsh.agent.inbox.Inbox;
+import dev.dsh.exception.AgentCreationException;
 import dev.dsh.session.Session;
 import dev.dsh.session.SessionStore;
 import dev.dsh.session.types.SessionEvent;
@@ -38,21 +39,33 @@ public class AgentRegistry {
     /**
      * 通过注册的工厂创建并发布新 Agent。
      */
-    public AgentHandle create(CreateAgentOptions options) throws Exception {
+    public AgentHandle create(CreateAgentOptions options) throws AgentCreationException {
         if (factory == null) {
             throw new IllegalStateException("没有注册 Agent 工厂（需要加载 agent-loop 插件）");
         }
-        return factory.createAgent(options);
+        try {
+            return factory.createAgent(options);
+        } catch (AgentCreationException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new AgentCreationException("创建 Agent 失败", e);
+        }
     }
 
     /**
      * 通过注册的工厂加载持久化会话并恢复 Agent。
      */
-    public AgentHandle resume(ResumeAgentOptions options) throws Exception {
+    public AgentHandle resume(ResumeAgentOptions options) throws AgentCreationException {
         if (factory == null) {
             throw new IllegalStateException("没有注册 Agent 工厂（需要加载 agent-loop 插件）");
         }
-        return factory.resume(options);
+        try {
+            return factory.resume(options);
+        } catch (AgentCreationException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new AgentCreationException("恢复 Agent 失败", e);
+        }
     }
 
     /**

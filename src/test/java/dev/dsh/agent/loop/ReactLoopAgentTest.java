@@ -9,6 +9,12 @@ import dev.dsh.llm.runtime.MockEchoAdapter;
 import dev.dsh.llm.types.ContentBlock;
 import dev.dsh.session.Session;
 import dev.dsh.session.types.SessionEvent;
+import dev.dsh.session.types.SessionEventTurnStart;
+import dev.dsh.session.types.SessionEventTurnEnd;
+import dev.dsh.session.types.SessionEventStepStart;
+import dev.dsh.session.types.SessionEventAssistantChunk;
+import dev.dsh.session.types.SessionEventAssistantMessage;
+import dev.dsh.session.types.SessionEventUserMessage;
 import dev.dsh.session.types.SessionId;
 import org.junit.jupiter.api.Test;
 
@@ -26,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class ReactLoopAgentTest {
 
     @Test
-    void 一次完整对话生成正确的事件序列() throws Exception {
+    void shouldCompleteFullConversationWithCorrectEvents() throws Exception {
         // 准备：LlmRuntime + MockEchoAdapter
         var llm = new LlmRuntime();
         llm.registerAdapter("mock-echo", new MockEchoAdapter());
@@ -72,12 +78,12 @@ class ReactLoopAgentTest {
 
         for (var e : events) {
             switch (e) {
-                case SessionEvent.TurnStart ignored -> hasTurnStart = true;
-                case SessionEvent.StepStart ignored -> hasStepStart = true;
-                case SessionEvent.UserMessage ignored -> hasUserMessage = true;
-                case SessionEvent.AssistantChunk ignored -> hasAssistantChunk = true;
-                case SessionEvent.AssistantMessage ignored -> hasAssistantMessage = true;
-                case SessionEvent.TurnEnd ignored -> hasTurnEnd = true;
+                case SessionEventTurnStart ignored -> hasTurnStart = true;
+                case SessionEventStepStart ignored -> hasStepStart = true;
+                case SessionEventUserMessage ignored -> hasUserMessage = true;
+                case SessionEventAssistantChunk ignored -> hasAssistantChunk = true;
+                case SessionEventAssistantMessage ignored -> hasAssistantMessage = true;
+                case SessionEventTurnEnd ignored -> hasTurnEnd = true;
                 default -> {}
             }
         }
@@ -91,7 +97,7 @@ class ReactLoopAgentTest {
 
         // 验证 turn 结束原因为 completed
         var lastEvent = events.getLast();
-        if (lastEvent instanceof SessionEvent.TurnEnd te) {
+        if (lastEvent instanceof SessionEventTurnEnd te) {
             assertInstanceOf(dev.dsh.session.types.TurnEndReason.Completed.class, te.reason());
         }
 
@@ -102,7 +108,7 @@ class ReactLoopAgentTest {
     }
 
     @Test
-    void 连续对话生成多轮() throws Exception {
+    void shouldHandleMultipleTurns() throws Exception {
         var llm = new LlmRuntime();
         llm.registerAdapter("mock-echo", new MockEchoAdapter());
 
@@ -130,7 +136,7 @@ class ReactLoopAgentTest {
 
         // 验证有两轮
         var turnStarts = session.events().stream()
-                .filter(e -> e instanceof SessionEvent.TurnStart)
+                .filter(e -> e instanceof SessionEventTurnStart)
                 .count();
         assertEquals(2, turnStarts, "应有 2 个 turn/start");
 

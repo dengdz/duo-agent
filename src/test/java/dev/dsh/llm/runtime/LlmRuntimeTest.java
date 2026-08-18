@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class LlmRuntimeTest {
 
     @Test
-    void mockEcho返回文本回复() {
+    void mockEchoShouldReturnTextReply() {
         var runtime = new LlmRuntime();
         runtime.registerAdapter("mock-echo", new MockEchoAdapter());
 
@@ -70,7 +70,7 @@ class LlmRuntimeTest {
     }
 
     @Test
-    void mockEcho触发工具调用() {
+    void mockEchoShouldTriggerToolCall() {
         var runtime = new LlmRuntime();
         runtime.registerAdapter("mock-echo", new MockEchoAdapter());
 
@@ -122,7 +122,7 @@ class LlmRuntimeTest {
     }
 
     @Test
-    void 未知提供方抛出异常() {
+    void shouldThrowOnUnknownProvider() {
         var runtime = new LlmRuntime();
         var options = new GenerateOptions("unknown-provider", "model", List.of());
 

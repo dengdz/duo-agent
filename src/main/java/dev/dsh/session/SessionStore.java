@@ -105,8 +105,8 @@ public class SessionStore {
             var hasOpenTurn = false;
             for (int i = 0; i <= endSeq; i++) {
                 var event = events.get(i);
-                if (event instanceof SessionEvent.TurnStart) hasOpenTurn = true;
-                if (event instanceof SessionEvent.TurnEnd) hasOpenTurn = false;
+                if (event instanceof SessionEventTurnStart) hasOpenTurn = true;
+                if (event instanceof SessionEventTurnEnd) hasOpenTurn = false;
             }
             if (hasOpenTurn) {
                 throw new IllegalArgumentException("fork 边界不能在打开的 turn 内");

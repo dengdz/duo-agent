@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class BlockAssemblerTest {
 
     @Test
-    void 组装文本块() {
+    void shouldAssembleTextBlocks() {
         var assembler = new BlockAssembler();
 
         assembler.push(new StreamChunk.BlockStart(0, "text"));
@@ -43,7 +43,7 @@ class BlockAssemblerTest {
     }
 
     @Test
-    void 组装工具调用块() {
+    void shouldAssembleToolCallBlocks() {
         var assembler = new BlockAssembler();
         var callId = new CallId("call-echo");
 
@@ -73,7 +73,7 @@ class BlockAssemblerTest {
     }
 
     @Test
-    void maxTokens时丢弃工具调用() {
+    void shouldDropToolCallsOnMaxTokens() {
         var assembler = new BlockAssembler();
 
         assembler.push(new StreamChunk.BlockStart(0, "text"));
@@ -96,7 +96,7 @@ class BlockAssemblerTest {
     }
 
     @Test
-    void 处理仅Delta协议() {
+    void shouldHandleDeltaOnlyProtocol() {
         var assembler = new BlockAssembler();
 
         // 没有 block-start/end，直接是 delta（畸形但容忍）
@@ -110,7 +110,7 @@ class BlockAssemblerTest {
     }
 
     @Test
-    void 忽略BlockEnd后的掉队者() {
+    void shouldIgnoreStragglersAfterBlockEnd() {
         var assembler = new BlockAssembler();
 
         assembler.push(new StreamChunk.BlockStart(0, "text"));
@@ -127,14 +127,14 @@ class BlockAssemblerTest {
     }
 
     @Test
-    void 默认结束原因为Stop() {
+    void shouldDefaultToStopReason() {
         var assembler = new BlockAssembler();
         // 未发出 finish chunk
         assertInstanceOf(FinishReason.Stop.class, assembler.finish());
     }
 
     @Test
-    void 默认用量为空() {
+    void shouldDefaultToEmptyUsage() {
         var assembler = new BlockAssembler();
         assertTrue(assembler.usage().isEmpty());
     }
