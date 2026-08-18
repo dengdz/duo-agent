@@ -17,6 +17,7 @@ import java.util.Map;
 public class FileReadTool {
 
     private static final int MAX_BYTES = 200 * 1024;
+    private static final String ARG_PATH = "path";
 
     public ToolDefinition getDefinition() {
         return new ToolDefinition(
@@ -25,19 +26,19 @@ public class FileReadTool {
                 Map.of(
                         "type", "object",
                         "properties", Map.of(
-                                "path", Map.of(
+                                ARG_PATH, Map.of(
                                         "type", "string",
                                         "description", "文件路径（绝对路径或相对于当前工作目录）"
                                 )
                         ),
-                        "required", List.of("path")
+                        "required", List.of(ARG_PATH)
                 ),
                 this::execute
         );
     }
 
     private ToolExecutionResult execute(Map<String, Object> args) {
-        var pathStr = (String) args.get("path");
+        var pathStr = (String) args.get(ARG_PATH);
         if (pathStr == null || pathStr.isBlank()) {
             return new ToolExecutionResult("错误：缺少 path 参数");
         }

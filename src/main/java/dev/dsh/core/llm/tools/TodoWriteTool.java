@@ -31,7 +31,10 @@ public class TodoWriteTool {
                                         "items", Map.of(
                                                 "type", "object",
                                                 "properties", Map.of(
-                                                        "content", Map.of("type", "string", "description", "任务描述"),
+                                                        "content", Map.of(
+                                                                "type", "string",
+                                                                "description", "任务描述"
+                                                        ),
                                                         "status", Map.of(
                                                                 "type", "string",
                                                                 "enum", List.of("pending", "in_progress", "completed"),

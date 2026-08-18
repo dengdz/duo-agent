@@ -21,6 +21,14 @@ public class BashTool {
 
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
     private static final int MAX_OUTPUT_BYTES = 100 * 1024;
+    private static final int MAX_TIMEOUT_SECONDS = 300;
+    private static final int MIN_TIMEOUT_SECONDS = 1;
+    private static final String SHELL = "/bin/sh";
+    private static final String SHELL_FLAG = "-c";
+
+    private static final String ARG_COMMAND = "command";
+    private static final String ARG_CWD = "cwd";
+    private static final String ARG_TIMEOUT = "timeout";
 
     public ToolDefinition getDefinition() {
         return new ToolDefinition(
@@ -29,42 +37,42 @@ public class BashTool {
                 Map.of(
                         "type", "object",
                         "properties", Map.of(
-                                "command", Map.of(
+                                ARG_COMMAND, Map.of(
                                         "type", "string",
                                         "description", "要执行的 shell 命令"
                                 ),
-                                "cwd", Map.of(
+                                ARG_CWD, Map.of(
                                         "type", "string",
                                         "description", "工作目录（可选，默认为当前目录）"
                                 ),
-                                "timeout", Map.of(
+                                ARG_TIMEOUT, Map.of(
                                         "type", "integer",
                                         "description", "超时时间（秒，默认 30，最大 300）"
                                 )
                         ),
-                        "required", List.of("command")
+                        "required", List.of(ARG_COMMAND)
                 ),
                 this::execute
         );
     }
 
     private ToolExecutionResult execute(Map<String, Object> args) {
-        var command = (String) args.get("command");
+        var command = (String) args.get(ARG_COMMAND);
         if (command == null || command.isBlank()) {
             return new ToolExecutionResult("错误：缺少 command 参数");
         }
 
-        var cwd = (String) args.get("cwd");
+        var cwd = (String) args.get(ARG_CWD);
         var directory = cwd != null && !cwd.isBlank() ? new File(cwd) : new File(".").getAbsoluteFile();
         if (!directory.exists() || !directory.isDirectory()) {
             return new ToolExecutionResult("错误：工作目录不存在: " + directory);
         }
 
-        var timeoutSeconds = parseTimeout(args.get("timeout"));
+        var timeoutSeconds = parseTimeout(args.get(ARG_TIMEOUT));
         var timeout = Duration.ofSeconds(timeoutSeconds);
 
         try {
-            var process = new ProcessBuilder("/bin/sh", "-c", command)
+            var process = new ProcessBuilder(SHELL, SHELL_FLAG, command)
                     .directory(directory)
                     .redirectErrorStream(true)
                     .start();
@@ -75,9 +83,13 @@ public class BashTool {
                 return new ToolExecutionResult("错误：命令执行超时（" + timeoutSeconds + " 秒）");
             }
 
-            var output = new String(process.getInputStream().readNBytes(MAX_OUTPUT_BYTES), StandardCharsets.UTF_8);
-            if (output.length() >= MAX_OUTPUT_BYTES) {
-                output += "\n...（输出已截断）";
+            String output;
+            try (var input = process.getInputStream()) {
+                var bytes = input.readNBytes(MAX_OUTPUT_BYTES);
+                output = new String(bytes, StandardCharsets.UTF_8);
+                if (bytes.length >= MAX_OUTPUT_BYTES) {
+                    output += "\n...（输出已截断）";
+                }
             }
 
             var exitCode = process.exitValue();
@@ -89,10 +101,12 @@ public class BashTool {
     }
 
     private int parseTimeout(Object value) {
-        if (value == null) return (int) DEFAULT_TIMEOUT.getSeconds();
+        if (value == null) {
+            return (int) DEFAULT_TIMEOUT.getSeconds();
+        }
         try {
             var seconds = ((Number) value).intValue();
-            return Math.clamp(seconds, 1, 300);
+            return Math.clamp(seconds, MIN_TIMEOUT_SECONDS, MAX_TIMEOUT_SECONDS);
         } catch (Exception e) {
             return (int) DEFAULT_TIMEOUT.getSeconds();
         }

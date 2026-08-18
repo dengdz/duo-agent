@@ -4,7 +4,11 @@ import dev.dsh.api.agent.InboxTarget;
 import dev.dsh.model.llm.Message;
 import dev.dsh.util.MessageId;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 耐久 Agent inbox 事件的增量投影。

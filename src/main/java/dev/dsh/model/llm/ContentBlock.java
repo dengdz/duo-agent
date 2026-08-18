@@ -23,7 +23,11 @@ public sealed interface ContentBlock {
     }
 
     /** 工具执行结果，送回给模型。 */
-    record ToolResult(CallId toolCallId, java.util.List<ContentBlock> content, boolean isError) implements ContentBlock {
+    record ToolResult(
+            CallId toolCallId,
+            java.util.List<ContentBlock> content,
+            boolean isError
+    ) implements ContentBlock {
         public ToolResult(CallId toolCallId, java.util.List<ContentBlock> content) {
             this(toolCallId, content, false);
         }

@@ -1,7 +1,5 @@
 package dev.dsh.model.llm;
 
-import dev.dsh.model.llm.Message;
-
 import java.util.List;
 
 /**

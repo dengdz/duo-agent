@@ -1,6 +1,5 @@
 package dev.dsh.model.llm;
 
-import dev.dsh.model.llm.ContentBlock;
 import dev.dsh.util.CallId;
 import dev.dsh.util.MessageId;
 

@@ -1,24 +1,48 @@
 package dev.dsh.core.agent;
 
-import dev.dsh.api.agent.*;
-import dev.dsh.core.agent.Inbox;
-import dev.dsh.exception.AgentLoopException;
-import dev.dsh.core.llm.BlockAssembler;
-import dev.dsh.core.llm.SystemPromptImpl;
-import dev.dsh.model.llm.Message;
-import dev.dsh.model.llm.MessageFactory;
+import dev.dsh.api.agent.Agent;
+import dev.dsh.api.agent.AgentCancelCause;
+import dev.dsh.api.agent.AgentOptions;
+import dev.dsh.api.agent.AgentStatus;
+import dev.dsh.api.agent.CancelOptions;
+import dev.dsh.api.agent.InboxTarget;
 import dev.dsh.api.llm.LlmRuntime;
 import dev.dsh.api.llm.StreamCallback;
 import dev.dsh.api.llm.SystemPrompt;
 import dev.dsh.api.llm.ToolRegistry;
-import dev.dsh.model.llm.*;
+import dev.dsh.core.llm.BlockAssembler;
+import dev.dsh.core.llm.SystemPromptImpl;
 import dev.dsh.core.session.Session;
-import dev.dsh.model.session.*;
+import dev.dsh.exception.AgentLoopException;
+import dev.dsh.model.llm.ContentBlock;
+import dev.dsh.model.llm.FinishReason;
+import dev.dsh.model.llm.GenerateOptions;
+import dev.dsh.model.llm.Message;
+import dev.dsh.model.llm.MessageFactory;
+import dev.dsh.model.llm.StreamChunk;
+import dev.dsh.model.llm.LlmFailure;
+import dev.dsh.model.session.SessionEventAssistantChunk;
+import dev.dsh.model.session.SessionEventAssistantMessage;
+import dev.dsh.model.session.SessionEventStepEnd;
+import dev.dsh.model.session.SessionEventStepStart;
+import dev.dsh.model.session.SessionEventToolCall;
+import dev.dsh.model.session.SessionEventToolResult;
+import dev.dsh.model.session.SessionEventTurnEnd;
+import dev.dsh.model.session.SessionEventTurnStart;
+import dev.dsh.model.session.SessionEventUserMessage;
+import dev.dsh.model.session.SessionId;
+import dev.dsh.model.session.SurfaceOp;
+import dev.dsh.model.session.TurnEndCancelCause;
+import dev.dsh.model.session.TurnEndReason;
 import dev.dsh.util.CallId;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -157,12 +181,11 @@ public class ReactLoopAgent implements Agent {
 
         TurnEndReason reason = null;
         var target = InboxTarget.NEXT_TURN;
+        int step = 0;
 
         try {
             while (true) {
-                if (r.cancelled) { reason = new TurnEndReason.Aborted(new TurnEndCancelCause.User()); break; }
-
-                int step = ((Running) phase).step + 1;
+                step++;
                 var claimed = inbox.claim(target);
                 if (claimed.isEmpty()) { reason = new TurnEndReason.Completed(); break; }
 

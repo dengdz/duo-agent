@@ -132,7 +132,8 @@ class DeepSeekAdapterTest {
             System.out.println("  role=" + msg.role() + " blocks=" + msg.content().size());
             for (var block : msg.content()) {
                 if (block instanceof ContentBlock.Text text) {
-                    System.out.println("    text: " + text.text().substring(0, Math.min(50, text.text().length())) + "...");
+                    var preview = text.text().substring(0, Math.min(50, text.text().length()));
+                    System.out.println("    text: " + preview + "...");
                 }
             }
         }
@@ -187,7 +188,8 @@ class DeepSeekAdapterTest {
         var todoTool = new TodoWriteTool();
         toolRegistry.register(todoTool.getDefinition());
 
-        var sp = new SystemPromptImpl("你是一个有帮助的助手。当用户要求记录任务时，使用 todo_write 工具。", false);
+        var sp = new SystemPromptImpl(
+                "你是一个有帮助的助手。当用户要求记录任务时，使用 todo_write 工具。", false);
         // 将工具 schema 注册到 system prompt
         var toolDef = todoTool.getDefinition();
         var toolSchema = new ToolSchema(toolDef.name(), toolDef.description(), toolDef.parameters());
@@ -259,11 +261,22 @@ class DeepSeekAdapterTest {
         };
 
         // 模拟 DeepSeek 流式工具调用：先发送 id/name，再分片发送 arguments
-        adapter.parseChunk("{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_123\",\"type\":\"function\",\"function\":{\"name\":\"todo_write\",\"arguments\":\"\"}}]},\"finish_reason\":null}]}", textBuf, callback);
-        adapter.parseChunk("{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\"}}]},\"finish_reason\":null}]}", textBuf, callback);
-        adapter.parseChunk("{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"todos\\\"\"}}]},\"finish_reason\":null}]}", textBuf, callback);
-        adapter.parseChunk("{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\":[{\\\"content\\\":\\\"买牛奶\\\"}]}\"}}]},\"finish_reason\":null}]}", textBuf, callback);
-        adapter.parseChunk("{\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}", textBuf, callback);
+        var chunk1 = "{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_123\","
+                + "\"type\":\"function\",\"function\":{\"name\":\"todo_write\",\"arguments\":\"\"}}]},"
+                + "\"finish_reason\":null}]}";
+        var chunk2 = "{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":"
+                + "{\"arguments\":\"{\"}}]},\"finish_reason\":null}]}";
+        var chunk3 = "{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":"
+                + "{\"arguments\":\"\\\"todos\\\"\"}}]},\"finish_reason\":null}]}";
+        var chunk4 = "{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":"
+                + "{\"arguments\":\":[{\\\"content\\\":\\\"买牛奶\\\"}]}\"}}]},\"finish_reason\":null}]}";
+        var chunk5 = "{\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}";
+
+        adapter.parseChunk(chunk1, textBuf, callback);
+        adapter.parseChunk(chunk2, textBuf, callback);
+        adapter.parseChunk(chunk3, textBuf, callback);
+        adapter.parseChunk(chunk4, textBuf, callback);
+        adapter.parseChunk(chunk5, textBuf, callback);
 
         // 验证 BlockStart
         var blockStarts = chunks.stream().filter(c -> c instanceof StreamChunk.BlockStart).toList();
@@ -315,8 +328,10 @@ class DeepSeekAdapterTest {
             public void onError(Throwable err) { fail("不应报错: " + err.getMessage()); }
         };
 
-        adapter.parseChunk("{\"choices\":[{\"delta\":{\"content\":\"你好\"},\"finish_reason\":null}]}", textBuf, callback);
-        adapter.parseChunk("{\"choices\":[{\"delta\":{\"content\":\"世界\"},\"finish_reason\":null}]}", textBuf, callback);
+        adapter.parseChunk(
+                "{\"choices\":[{\"delta\":{\"content\":\"你好\"},\"finish_reason\":null}]}", textBuf, callback);
+        adapter.parseChunk(
+                "{\"choices\":[{\"delta\":{\"content\":\"世界\"},\"finish_reason\":null}]}", textBuf, callback);
         adapter.parseChunk("{\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}", textBuf, callback);
 
         assertTrue(chunks.getFirst() instanceof StreamChunk.BlockStart);
@@ -345,7 +360,8 @@ class DeepSeekAdapterTest {
             case StreamChunk.ReasoningDelta rd -> "ReasoningDelta(" + rd.index() + ")";
             case StreamChunk.ToolCallDelta tcd -> "ToolCallDelta(" + tcd.index() + ", " + tcd.name() + ")";
             case StreamChunk.BlockEnd be -> "BlockEnd(" + be.index() + ")";
-            case StreamChunk.Usage u -> "Usage(" + u.usage().inputTokens() + " in, " + u.usage().outputTokens() + " out)";
+            case StreamChunk.Usage u -> "Usage(" + u.usage().inputTokens()
+                    + " in, " + u.usage().outputTokens() + " out)";
             case StreamChunk.Finish f -> "Finish(" + f.reason() + ")";
         };
     }

@@ -42,11 +42,14 @@ class TodoWriteToolTest {
     void 再次调用覆盖整个列表() {
         var tool = new TodoWriteTool();
         @SuppressWarnings("unchecked")
-        var args1 = (Map<String, Object>) JsonParser.parse("{\"todos\":[{\"content\":\"a\",\"status\":\"pending\"}]}");
+        var args1 = (Map<String, Object>) JsonParser.parse(
+                "{\"todos\":[{\"content\":\"a\",\"status\":\"pending\"}]}");
         tool.getDefinition().executor().apply(args1);
 
         @SuppressWarnings("unchecked")
-        var args2 = (Map<String, Object>) JsonParser.parse("{\"todos\":[{\"content\":\"b\",\"status\":\"pending\"},{\"content\":\"c\",\"status\":\"pending\"}]}");
+        var args2 = (Map<String, Object>) JsonParser.parse(
+                "{\"todos\":[{\"content\":\"b\",\"status\":\"pending\"},"
+                        + "{\"content\":\"c\",\"status\":\"pending\"}]}");
         tool.getDefinition().executor().apply(args2);
 
         var todos = tool.getTodos();
@@ -58,7 +61,8 @@ class TodoWriteToolTest {
     @Test
     void 真实管线参数格式可解析() {
         // 模拟 DeepSeek 实际传回的 arguments 字符串
-        var argsJson = "{\"todos\":[{\"content\":\"买牛奶\",\"status\":\"pending\"},{\"content\":\"写报告\",\"status\":\"pending\"}]}";
+        var argsJson = "{\"todos\":[{\"content\":\"买牛奶\",\"status\":\"pending\"},"
+                + "{\"content\":\"写报告\",\"status\":\"pending\"}]}";
         var parsed = JsonParser.parse(argsJson);
         assertTrue(parsed instanceof List || parsed instanceof Map);
     }

@@ -1,9 +1,16 @@
 package dev.dsh.core.session;
 
-import dev.dsh.model.session.*;
+import dev.dsh.model.session.CreateSessionOptions;
+import dev.dsh.model.session.SessionEvent;
+import dev.dsh.model.session.SessionEventTurnEnd;
+import dev.dsh.model.session.SessionEventTurnStart;
+import dev.dsh.model.session.SessionHeader;
+import dev.dsh.model.session.SessionId;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 内存会话存储（{@code ctx.sessions}）。
@@ -17,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SessionStore {
 
     private final Map<SessionId, Session> store = new ConcurrentHashMap<>();
-    private int counter = 0;
+    private final AtomicInteger counter = new AtomicInteger(0);
 
     /**
      * 创建并注册一个会话。
@@ -28,7 +35,7 @@ public class SessionStore {
     public Session create(SessionId id, CreateSessionOptions options) {
         if (id == null) {
             do {
-                id = new SessionId("session-" + (++counter));
+                id = new SessionId("session-" + counter.incrementAndGet());
             } while (store.containsKey(id));
         }
         if (store.containsKey(id)) {

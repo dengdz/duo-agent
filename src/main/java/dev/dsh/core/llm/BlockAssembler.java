@@ -6,7 +6,12 @@ import dev.dsh.model.llm.StreamChunk;
 import dev.dsh.model.llm.TokenUsage;
 import dev.dsh.util.CallId;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 将原始 {@link StreamChunk} 增量组装为完整的 {@link ContentBlock} 列表

@@ -3,7 +3,10 @@ package dev.dsh.core.session;
 import dev.dsh.model.session.SessionEvent;
 import dev.dsh.model.session.SurfaceOp;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
 
 /**
  * 会话事件日志之上的表面层：产生 LLM 消息的事件的有序视图。

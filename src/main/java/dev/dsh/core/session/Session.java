@@ -7,7 +7,8 @@ import dev.dsh.model.llm.ContentBlock;
 import dev.dsh.core.session.SurfaceManager;
 import dev.dsh.model.session.*;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 事件溯源的会话：一个 {@link SessionEvent} 的追加式日志。

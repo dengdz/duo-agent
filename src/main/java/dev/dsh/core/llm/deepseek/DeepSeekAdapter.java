@@ -2,7 +2,13 @@ package dev.dsh.core.llm.deepseek;
 
 import dev.dsh.api.llm.LlmAdapter;
 import dev.dsh.api.llm.StreamCallback;
-import dev.dsh.model.llm.*;
+import dev.dsh.model.llm.ContentBlock;
+import dev.dsh.model.llm.FinishReason;
+import dev.dsh.model.llm.GenerateOptions;
+import dev.dsh.model.llm.Message;
+import dev.dsh.model.llm.StreamChunk;
+import dev.dsh.model.llm.TokenUsage;
+import dev.dsh.model.llm.ToolSchema;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -10,8 +16,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * DeepSeek API 适配器。
@@ -29,6 +38,15 @@ public class DeepSeekAdapter extends LlmAdapter {
     private final HttpClient httpClient;
     private final String baseUrl;
     private final String apiKey;
+
+    // ---- 流式解析状态（每次 stream() 前重置）----
+
+    private boolean firstChunk = true;
+    private boolean hasToolCalls = false;
+    private boolean toolCallBlockStarted = false;
+    private String currentToolCallId;
+    private String currentToolCallName;
+    private final StringBuilder currentToolCallArgs = new StringBuilder();
 
     public DeepSeekAdapter() {
         this.httpClient = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
@@ -58,21 +76,21 @@ public class DeepSeekAdapter extends LlmAdapter {
             httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofLines())
                     .thenAccept(response -> {
                         if (response.statusCode() != 200) {
-                            var body = response.body().reduce("", (a, b) -> a + b);
+                            var body = response.body().collect(Collectors.joining());
                             callback.onError(new RuntimeException(
                                     "DeepSeek API 返回 " + response.statusCode() + ": " + body));
                             return;
                         }
                         try {
                             var textBuilder = new StringBuilder();
-response.body().forEach(line -> {
-                        if (!line.startsWith("data: ")) return;
-                        var data = line.substring(6).trim();
-                        if ("[DONE]".equals(data) || data.isEmpty()) return;
-                        parseChunk(data, textBuilder, callback);
-                    });
-                    // 如果 SSE 流中没有 finish_reason，兜底发送
-                    callback.onComplete();
+                            response.body().forEach(line -> {
+                                if (!line.startsWith("data: ")) return;
+                                var data = line.substring(6).trim();
+                                if ("[DONE]".equals(data) || data.isEmpty()) return;
+                                parseChunk(data, textBuilder, callback);
+                            });
+                            // 如果 SSE 流中没有 finish_reason，兜底发送
+                            callback.onComplete();
                         } catch (Exception e) {
                             callback.onError(e);
                         }
@@ -86,13 +104,7 @@ response.body().forEach(line -> {
         }
     }
 
-    /** 解析单个 SSE data 行，提取文本 delta、工具调用 delta 并发射。 */
-    private boolean firstChunk = true;
-    private boolean hasToolCalls = false;
-    private boolean toolCallBlockStarted = false;
-    private String currentToolCallId;
-    private String currentToolCallName;
-    private final StringBuilder currentToolCallArgs = new StringBuilder();
+    // ---- 流式解析 ----
 
     private void resetParserState() {
         firstChunk = true;
@@ -103,6 +115,7 @@ response.body().forEach(line -> {
         currentToolCallArgs.setLength(0);
     }
 
+    /** 解析单个 SSE data 行，提取文本 delta、工具调用 delta 并发射。 */
     void parseChunk(String json, StringBuilder textBuf, StreamCallback callback) {
         // 提取 choices[0].delta.content
         var content = extractJsonString(json, "content");
@@ -259,7 +272,7 @@ response.body().forEach(line -> {
                 .replace("\\\\", "\\");
     }
 
-    /** 提取 JSON 对象（从 key 后的第一个 { 到匹配的 }）。 */
+    /** 提取 JSON 对象（从 key 后的第一个 { 到匹配的 }，跳过字符串内容）。 */
     private String extractJsonObject(String json, String fieldName) {
         var search = "\"" + fieldName + "\":";
         var idx = json.indexOf(search);
@@ -267,11 +280,20 @@ response.body().forEach(line -> {
         var start = json.indexOf("{", idx + search.length());
         if (start < 0) return null;
         var depth = 1;
+        var inString = false;
         var end = start + 1;
         while (depth > 0 && end < json.length()) {
             var c = json.charAt(end);
-            if (c == '{') depth++;
-            else if (c == '}') depth--;
+            if (c == '\\') {
+                end += 2;
+                continue;
+            }
+            if (c == '"') {
+                inString = !inString;
+            } else if (!inString) {
+                if (c == '{') depth++;
+                else if (c == '}') depth--;
+            }
             end++;
         }
         return json.substring(start, end);

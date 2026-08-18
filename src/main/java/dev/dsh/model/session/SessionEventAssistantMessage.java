@@ -9,7 +9,10 @@ public record SessionEventAssistantMessage(
         int turn, int step,
         Message.AssistantMessage message, TokenUsage usage
 ) implements SessionEvent {
-    public SessionEventAssistantMessage(int seq, int turn, int step, Message.AssistantMessage message, SurfaceOp surfaceOp, TokenUsage usage) {
+    public SessionEventAssistantMessage(
+            int seq, int turn, int step,
+            Message.AssistantMessage message, SurfaceOp surfaceOp, TokenUsage usage
+    ) {
         this(seq, System.currentTimeMillis(), false, surfaceOp, null, turn, step, message, usage);
     }
     @Override public String type() { return SessionEventTypes.ASSISTANT_MESSAGE; }
