@@ -2,11 +2,18 @@ package dev.duo.core.agent;
 
 import dev.duo.api.agent.Agent;
 import dev.duo.api.agent.AgentCancelCause;
+import dev.duo.api.agent.AgentHooks;
 import dev.duo.api.agent.AgentOptions;
 import dev.duo.api.agent.AgentStatus;
 import dev.duo.api.agent.CancelOptions;
 import dev.duo.api.agent.Inbox;
 import dev.duo.api.agent.InboxTarget;
+import dev.duo.api.agent.PreStepDecision;
+import dev.duo.api.agent.RequestErrorAction;
+import dev.duo.api.hook.PreStepHook;
+import dev.duo.api.hook.RequestErrorHook;
+import dev.duo.api.hook.RequestHook;
+import dev.duo.api.hook.ToolExecutionHook;
 import dev.duo.api.llm.LlmRuntime;
 import dev.duo.api.llm.StreamCallback;
 import dev.duo.api.llm.SystemPrompt;
@@ -15,6 +22,7 @@ import dev.duo.core.llm.BlockAssembler;
 import dev.duo.core.llm.SystemPromptImpl;
 import dev.duo.core.session.Session;
 import dev.duo.exception.AgentLoopException;
+import dev.duo.exception.LlmException;
 import dev.duo.model.llm.ContentBlock;
 import dev.duo.model.llm.FinishReason;
 import dev.duo.model.llm.GenerateOptions;
@@ -34,13 +42,10 @@ import dev.duo.model.session.SessionEventTurnStart;
 import dev.duo.model.session.SessionEventUserMessage;
 import dev.duo.model.session.SessionId;
 import dev.duo.model.session.SurfaceOp;
-import dev.duo.model.session.TurnEndCancelCause;
 import dev.duo.model.session.TurnEndReason;
-import dev.duo.util.CallId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -49,13 +54,15 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Agent 驱动循环。
  * <p>
  * 实现核心 turn/step 状态机、session 日志、inbox 消息流转、LLM 调用和 system-prompt 组装。
- * 简化版跳过：agent/pre-step/request/turn-stopping 等拦截器、工具执行。
+ * 行为扩展通过 {@link AgentHooks} 的四个拦截点外挂（pre-step 决策、request 构造、
+ * request-error 恢复、工具执行环绕），循环本身不因新能力而修改。
  * </p>
  *
  * @author zhangyl
@@ -67,6 +74,9 @@ public class ReactLoopAgent implements Agent {
     
     private static final String DEFAULT_PROVIDER = "mock-echo";
     private static final String DEFAULT_MODEL = "mock-model";
+    private static final String FAILURE_CODE_UNKNOWN = "UNKNOWN";
+    /** 循环层的重试硬上限：防止无上限的 request-error hook 造成无限重试。 */
+    private static final int MAX_REQUEST_ATTEMPTS_PER_STEP = 10;
 
     // ---- 状态机 ----
 
@@ -89,6 +99,7 @@ public class ReactLoopAgent implements Agent {
     private final LlmRuntime llmRuntime;
     private final SystemPrompt systemPrompt;
     private final ToolRegistry toolRegistry;
+    private final AgentHooks hooks;
     private final Executor driverExecutor;
 
     private final Object phaseLock = new Object();
@@ -106,6 +117,7 @@ public class ReactLoopAgent implements Agent {
         this.llmRuntime = llmRuntime;
         this.systemPrompt = systemPrompt;
         this.toolRegistry = toolRegistry;
+        this.hooks = options.getHooksOrDefault();
         // 命名的虚拟线程执行器：统一驱动线程的创建与命名，便于排查
         this.driverExecutor = Executors.newThreadPerTaskExecutor(
                 Thread.ofVirtual().name("agent-driver-", 0).factory());
@@ -242,15 +254,30 @@ public class ReactLoopAgent implements Agent {
                 var claimed = inbox.claim(target);
                 if (claimed.isEmpty()) { reason = new TurnEndReason.Completed(); break; }
 
+                // pre-step 决策链：内置行为 = 以已认领的用户消息原样进入
+                var entering = userMessagesOf(claimed);
+                PreStepDecision decision;
+                try {
+                    decision = hooks.dispatchPreStep(
+                            new PreStepHook.PreStepContext(id, turn, step, entering),
+                            () -> new PreStepDecision.Enter(entering));
+                } catch (Exception e) {
+                    throw new AgentLoopException("pre-step hook 失败", e);
+                }
+                if (decision instanceof PreStepDecision.Reject) {
+                    // 被拒的 turn 以 Blocked 结束：不写 step/start，不消耗模型调用
+                    reason = new TurnEndReason.Blocked();
+                    break;
+                }
+                var enteringMessages = ((PreStepDecision.Enter) decision).messages();
+
                 phase = new Running(turn, step, false);
                 session.append(new SessionEventStepStart(session.seq(), turn, step));
 
-                for (var msg : claimed) {
-                    if (msg instanceof Message.UserMessage userMsg) {
-                        session.append(new SessionEventUserMessage(
-                                session.seq(), userMsg, new SurfaceOp.Append()
-                        ));
-                    }
+                for (var msg : enteringMessages) {
+                    session.append(new SessionEventUserMessage(
+                            session.seq(), msg, new SurfaceOp.Append()
+                    ));
                 }
 
                 try {
@@ -265,7 +292,14 @@ public class ReactLoopAgent implements Agent {
             }
         } catch (AgentLoopException e) {
             if (reason == null) {
-                reason = new TurnEndReason.Error(new LlmFailure(e.getMessage(), "UNKNOWN"));
+                reason = new TurnEndReason.Error(new LlmFailure(e.getMessage(), FAILURE_CODE_UNKNOWN));
+            }
+            throw e;
+        } catch (RuntimeException e) {
+            // 非预期异常也必须落 Error 结束原因，否则 finally 会错记为 Completed
+            if (reason == null) {
+                var message = e.getMessage() != null ? e.getMessage() : e.toString();
+                reason = new TurnEndReason.Error(new LlmFailure(message, FAILURE_CODE_UNKNOWN));
             }
             throw e;
         } finally {
@@ -282,26 +316,78 @@ public class ReactLoopAgent implements Agent {
     private TurnEndReason executeStep(int turn, int step) throws AgentLoopException {
         var provider = options.provider() != null ? options.provider() : DEFAULT_PROVIDER;
         var model = options.model() != null ? options.model() : DEFAULT_MODEL;
-        var messages = session.deriveMessages();
+        var requestCtx = new RequestHook.RequestContext(id, turn, step);
 
-        // 组装 system prompt
+        BlockAssembler assembler;
+        int attempt = 0;
+        while (true) {
+            GenerateOptions request;
+            try {
+                request = hooks.dispatchRequest(requestCtx, () -> buildRequest(provider, model));
+            } catch (Exception e) {
+                throw new AgentLoopException("构造模型请求失败", e);
+            }
+
+            try {
+                assembler = streamOnce(turn, step, request);
+                break;
+            } catch (StepLlmException e) {
+                var action = dispatchRequestError(turn, step, e.failure());
+                if (action instanceof RequestErrorAction.Retry) {
+                    if (++attempt >= MAX_REQUEST_ATTEMPTS_PER_STEP) {
+                        throw new AgentLoopException(
+                                "step 请求重试超过循环层上限 " + MAX_REQUEST_ATTEMPTS_PER_STEP, e);
+                    }
+                    logger.warn("Agent {} turn {} step {} 请求失败（{}），第 {} 次重试",
+                            id, turn, step, e.failure().code(), attempt);
+                    continue;
+                }
+                throw new AgentLoopException("LLM 调用失败: " + e.failure().message(), e);
+            }
+        }
+
+        return finalizeStep(turn, step, provider, model, assembler);
+    }
+
+    /** 内置 request 行为：从 session 日志派生消息并组装默认请求。 */
+    private GenerateOptions buildRequest(String provider, String model) {
+        var messages = session.deriveMessages();
         var assembly = systemPrompt.assemble();
         var system = SystemPromptImpl.renderPrompt(assembly);
         var tools = assembly.tools().isEmpty() ? null : assembly.tools();
+        return new GenerateOptions(provider, model, messages, system, tools);
+    }
 
-        var request = new GenerateOptions(provider, model, messages, system, tools);
+    /** request-error 决策链：无人接管恢复权时保持失败。 */
+    private RequestErrorAction dispatchRequestError(int turn, int step, LlmFailure failure)
+            throws AgentLoopException {
+        try {
+            return hooks.dispatchRequestError(
+                    new RequestErrorHook.RequestErrorContext(id, turn, step, failure),
+                    () -> new RequestErrorAction.Fail());
+        } catch (Exception e) {
+            throw new AgentLoopException("request-error hook 失败", e);
+        }
+    }
 
+    /** 执行一次流式调用并组装块；失败以 StepLlmException 携带结构化故障抛出。 */
+    private BlockAssembler streamOnce(int turn, int step, GenerateOptions request)
+            throws StepLlmException {
         var assembler = new BlockAssembler();
-        var chunkSeqs = new ArrayList<Integer>();
         var barrier = new CompletableFuture<Void>();
         var errorRef = new AtomicReference<Throwable>();
+        // 超时/失败后关闭回调入口：迟到的 chunk 不得再写入 session，
+        // 否则重试场景下两个 attempt 的 chunk 会混入同一 turn/step 日志
+        var closed = new AtomicBoolean();
 
         llmRuntime.stream(request, new StreamCallback() {
             @Override
             public void onChunk(StreamChunk chunk) {
+                if (closed.get()) {
+                    return;
+                }
                 int seq = session.seq();
                 session.append(new SessionEventAssistantChunk(seq, turn, step, chunk));
-                chunkSeqs.add(seq);
                 assembler.push(chunk);
             }
             @Override
@@ -310,37 +396,48 @@ public class ReactLoopAgent implements Agent {
             public void onError(Throwable err) { errorRef.set(err); barrier.completeExceptionally(err); }
         });
 
-        var llmTimeoutSeconds = options.getLlmTimeoutOrDefault().toSeconds();
+        var timeoutSeconds = options.getLlmTimeoutOrDefault().toSeconds();
         try {
-            barrier.get(llmTimeoutSeconds, TimeUnit.SECONDS);
+            barrier.get(timeoutSeconds, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            logger.warn("LLM call interrupted for agent {}", id, e);
-            throw new AgentLoopException("LLM 调用被中断", e);
+            closed.set(true);
+            throw new StepLlmException(new LlmFailure("LLM 调用被中断", "INTERRUPTED"), e);
         } catch (ExecutionException e) {
-            logger.error("LLM call failed for agent {}", id, e);
-            throw new AgentLoopException("LLM 调用失败", e.getCause());
-        } catch (java.util.concurrent.TimeoutException e) {
-            logger.error("LLM call timeout for agent {} after {}s", id, llmTimeoutSeconds, e);
-            throw new AgentLoopException("LLM 调用超时", e);
+            closed.set(true);
+            throw StepLlmException.of(errorRef.get() != null ? errorRef.get() : e.getCause());
+        } catch (TimeoutException e) {
+            closed.set(true);
+            throw new StepLlmException(
+                    new LlmFailure("LLM 调用超时（" + timeoutSeconds + "s）", "TIMEOUT"), e);
         }
         if (errorRef.get() != null) {
-            logger.error("LLM stream error for agent {}", id, errorRef.get());
-            throw new AgentLoopException("LLM 调用失败", errorRef.get());
+            closed.set(true);
+            throw StepLlmException.of(errorRef.get());
         }
 
         var finish = assembler.finish();
-        if (finish instanceof FinishReason.Aborted || finish instanceof FinishReason.Error) {
-            throw new AgentLoopException("LLM 异常结束");
+        if (finish instanceof FinishReason.Aborted) {
+            throw new StepLlmException(new LlmFailure("LLM 流被中止", "ABORTED"));
         }
+        if (finish instanceof FinishReason.Error) {
+            throw new StepLlmException(new LlmFailure("LLM 异常结束", "STREAM_ERROR"));
+        }
+        return assembler;
+    }
 
+    /** 写入 assistant 消息、判定结束原因并执行工具调用。 */
+    private TurnEndReason finalizeStep(int turn, int step, String provider, String model,
+                                       BlockAssembler assembler) throws AgentLoopException {
         var assistantMsg = MessageFactory.createAssistantMessage(assembler.blocks(), provider, model);
         session.append(new SessionEventAssistantMessage(
                 session.seq(), turn, step, assistantMsg,
                 new SurfaceOp.Append(), assembler.usage().orElse(null)
         ));
 
-        if (finish instanceof FinishReason.MaxTokens) return new TurnEndReason.MaxTokens();
+        if (assembler.finish() instanceof FinishReason.MaxTokens) {
+            return new TurnEndReason.MaxTokens();
+        }
 
         // 检查是否有工具调用
         var toolCallBlocks = assembler.blocks().stream()
@@ -348,22 +445,28 @@ public class ReactLoopAgent implements Agent {
                 .map(b -> (ContentBlock.ToolCall) b)
                 .toList();
 
-        if (toolCallBlocks.isEmpty()) return new TurnEndReason.Completed();
+        if (toolCallBlocks.isEmpty()) {
+            return new TurnEndReason.Completed();
+        }
 
-        // 执行工具调用
         for (var tc : toolCallBlocks) {
             logger.debug("Executing tool call: {} for agent {}", tc.name(), id);
             session.append(new SessionEventToolCall(
                     session.seq(), turn, step, tc.id(), tc.name(), tc.arguments()
             ));
 
-            // 解析参数；失败时以错误结果返回给模型，避免工具在错误参数下静默执行
             ToolExecutionResult result;
             try {
-                result = toolRegistry.execute(tc.name(), parseJsonArgs(tc.arguments()));
+                var args = parseJsonArgs(tc.arguments());
+                result = hooks.dispatchTool(
+                        new ToolExecutionHook.ToolCallContext(id, turn, step, tc.id(), tc.name(), args),
+                        () -> executeToolSafely(tc.name(), args));
             } catch (IllegalArgumentException e) {
-                logger.warn("Tool {} execution failed due to invalid arguments for agent {}", tc.name(), id, e);
+                // 参数无效：不进入执行链，直接以错误结果回给模型
+                logger.warn("Tool {} got invalid arguments for agent {}", tc.name(), id, e);
                 result = new ToolExecutionResult(e);
+            } catch (Exception e) {
+                throw new AgentLoopException("工具执行 hook 失败: " + tc.name(), e);
             }
 
             var toolResultMsg = MessageFactory.createToolResultMessage(tc.id(), result.content(), result.isError());
@@ -377,6 +480,57 @@ public class ReactLoopAgent implements Agent {
 
         // 有工具调用时，返回 null 表示 step 继续
         return null;
+    }
+
+    /** 内置工具执行行为：执行工具并把非法参数转为错误结果。 */
+    private ToolExecutionResult executeToolSafely(String name, Map<String, Object> args) {
+        try {
+            return toolRegistry.execute(name, args);
+        } catch (IllegalArgumentException e) {
+            logger.warn("Tool {} execution failed for agent {}", name, id, e);
+            return new ToolExecutionResult(e);
+        }
+    }
+
+    /** 从认领批次中提取用户消息。 */
+    private static List<Message.UserMessage> userMessagesOf(List<Message> messages) {
+        return messages.stream()
+                .filter(m -> m instanceof Message.UserMessage)
+                .map(m -> (Message.UserMessage) m)
+                .toList();
+    }
+
+    /** 携带结构化故障的 step 内部异常，用于 request-error 恢复决策。 */
+    private static final class StepLlmException extends Exception {
+
+        private final LlmFailure failure;
+
+        StepLlmException(LlmFailure failure, Throwable cause) {
+            super(failure.message(), cause);
+            this.failure = failure;
+        }
+
+        StepLlmException(LlmFailure failure) {
+            this(failure, null);
+        }
+
+        LlmFailure failure() {
+            return failure;
+        }
+
+        /** 从底层异常提取结构化故障：LlmException 携带 HTTP 状态码，其余按传输失败处理。 */
+        static StepLlmException of(Throwable cause) {
+            if (cause instanceof LlmException le) {
+                var code = le.status() != null ? "HTTP_" + le.status() : "TRANSPORT";
+                return new StepLlmException(
+                        new LlmFailure(le.getMessage(), code, le.status(), null, null), le);
+            }
+            if (cause == null) {
+                return new StepLlmException(new LlmFailure("LLM 调用失败（未知原因）", "TRANSPORT"));
+            }
+            var message = cause.getMessage() != null ? cause.getMessage() : cause.toString();
+            return new StepLlmException(new LlmFailure(message, "TRANSPORT"), cause);
+        }
     }
 
     /** 解析 JSON 参数为嵌套结构；非法输入抛出 IllegalArgumentException。 */
