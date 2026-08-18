@@ -42,7 +42,11 @@ Java 21 + Maven 多模块项目，位于 `/Users/zhangyl/IdeaProjects/mp-agent`�
 1. **agent/pre-step/request/turn-stopping 拦截器**：对应原版 `packages/core/agent/src/runtime-types.ts` 中的 waterfall 事件
 2. **Session 持久化**：JSONL/SQLite 后端
 3. **Web UI 前端**
-4. **真实 API 回归测试**：需要 `DEEPSEEK_API_KEY` 环境变量运行 `工具调用往返测试`
+4. **真实 API 回归测试**：需要 `DEEPSEEK_API_KEY` 环境变量运行 `工具调用往返测试`。该测试现已断言 `todos` 非空，可捕捉参数解析回归。
+
+## 已知坑位（已修复，记录备查）
+
+- **工具参数解析**：`ReactLoopAgent.parseJsonArgs()` 原先用扁平正则，会把 `{"todos":[...]}` 的数组整个当成字符串塞进 map，导致 `TodoWriteTool` 里 `(List) args.get("todos")` 抛出 `ClassCastException`（被 ToolRegistryImpl 兜底成"错误结果"），工具看似执行了却记 0 条。已新增零依赖 `dev.dsh.util.JsonParser` 做真正的嵌套解析，并让 `TodoWriteTool` 消费 `List<Map<String,Object>>`。
 
 ## 架构分层
 
