@@ -11,11 +11,14 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * {@link ToolRegistryImpl} 的测试。
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 class ToolRegistryImplTest {
 
     @Test
-    void 注册和查询工具() {
+    void testRegister_whenToolAdded_thenQueryable() {
         var registry = new ToolRegistryImpl();
         var tool = new ToolDefinition("test", "Test tool", Map.of("type", "object"), args -> null);
         registry.register(tool);
@@ -25,7 +28,7 @@ class ToolRegistryImplTest {
     }
 
     @Test
-    void 重复注册抛出异常() {
+    void testRegister_whenDuplicateName_thenThrows() {
         var registry = new ToolRegistryImpl();
         var tool = new ToolDefinition("dup", "Dup", Map.of("type", "object"), args -> null);
         registry.register(tool);
@@ -33,7 +36,7 @@ class ToolRegistryImplTest {
     }
 
     @Test
-    void 执行工具() {
+    void testExecute_whenToolRuns_thenReturnsResult() {
         var registry = new ToolRegistryImpl();
         registry.register(new ToolDefinition("echo", "Echo", Map.of(
                 "type", "object",
@@ -49,7 +52,7 @@ class ToolRegistryImplTest {
     }
 
     @Test
-    void 执行未知工具抛出异常() {
+    void testExecute_whenUnknownTool_thenThrows() {
         var registry = new ToolRegistryImpl();
         assertThrows(IllegalArgumentException.class, () ->
                 registry.execute("unknown", Map.of())
@@ -57,7 +60,7 @@ class ToolRegistryImplTest {
     }
 
     @Test
-    void 工具执行异常返回错误结果() {
+    void testExecute_whenToolThrows_thenReturnsErrorResult() {
         var registry = new ToolRegistryImpl();
         registry.register(new ToolDefinition("crash", "Crash", Map.of("type", "object"), args -> {
             throw new RuntimeException("爆炸");
@@ -68,7 +71,7 @@ class ToolRegistryImplTest {
     }
 
     @Test
-    void TodoWrite工具注册和执行() {
+    void testExecute_whenTodoWriteArgs_thenRecordsTodos() {
         var registry = new ToolRegistryImpl();
         var todoTool = new TodoWriteTool();
         registry.register(todoTool.getDefinition());
@@ -86,7 +89,7 @@ class ToolRegistryImplTest {
     }
 
     @Test
-    void 注册后dispose工具() throws Exception {
+    void testRegister_whenDisposed_thenRemoved() throws Exception {
         var registry = new ToolRegistryImpl();
         var disposer = registry.register(new ToolDefinition("temp", "Temp", Map.of("type", "object"), args -> null));
         assertEquals(1, registry.getAll().size());

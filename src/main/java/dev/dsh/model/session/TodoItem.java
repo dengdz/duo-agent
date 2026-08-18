@@ -5,22 +5,22 @@ package dev.dsh.model.session;
  * <p>
  * 对应 TS 源码中的 {@code TodoItem}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public record TodoItem(
         /** 任务描述。 */
         String content,
         /** 生命周期状态。 */
-        String status
+        TodoStatus status
 ) {
     public TodoItem {
         if (content == null || content.isBlank()) {
             throw new IllegalArgumentException("content 不能为空");
         }
-        if (status == null
-                || (!status.equals("pending")
-                && !status.equals("in_progress")
-                && !status.equals("completed"))) {
-            throw new IllegalArgumentException("status 必须是 pending/in_progress/completed");
+        if (status == null) {
+            throw new IllegalArgumentException("status 不能为空");
         }
     }
 }

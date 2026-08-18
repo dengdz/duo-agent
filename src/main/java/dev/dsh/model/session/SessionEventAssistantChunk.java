@@ -2,6 +2,12 @@ package dev.dsh.model.session;
 
 import dev.dsh.model.llm.StreamChunk;
 
+/**
+ * 助手消息的流式输出分块事件。
+ *
+ * @author zhangyl
+ * @date 2026-08-18
+ */
 public record SessionEventAssistantChunk(
         int seq, long time, boolean ignorable,
         SurfaceOp surfaceOp, int[] sourceEventSeqs,
@@ -10,5 +16,8 @@ public record SessionEventAssistantChunk(
     public SessionEventAssistantChunk(int seq, int turn, int step, StreamChunk chunk) {
         this(seq, System.currentTimeMillis(), false, null, null, turn, step, chunk);
     }
-    @Override public String type() { return SessionEventTypes.ASSISTANT_CHUNK; }
+    @Override
+    public String type() {
+        return SessionEventTypes.ASSISTANT_CHUNK;
+    }
 }

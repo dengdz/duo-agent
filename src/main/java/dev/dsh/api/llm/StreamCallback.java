@@ -7,6 +7,9 @@ import dev.dsh.model.llm.StreamChunk;
  * <p>
  * 对应 TS 源码中消费 {@code AsyncIterable<StreamChunk>} 的行为。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public interface StreamCallback {
     /** 流中每个 chunk 到达时调用。 */

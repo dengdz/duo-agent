@@ -2,6 +2,7 @@ package dev.dsh.core.llm.deepseek;
 
 import dev.dsh.api.llm.LlmAdapter;
 import dev.dsh.api.llm.StreamCallback;
+import dev.dsh.exception.LlmException;
 import dev.dsh.model.llm.ContentBlock;
 import dev.dsh.model.llm.FinishReason;
 import dev.dsh.model.llm.GenerateOptions;
@@ -9,6 +10,8 @@ import dev.dsh.model.llm.Message;
 import dev.dsh.model.llm.StreamChunk;
 import dev.dsh.model.llm.TokenUsage;
 import dev.dsh.model.llm.ToolSchema;
+import dev.dsh.model.session.SessionEventTypes;
+import dev.dsh.util.CallId;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -28,11 +31,15 @@ import java.util.stream.Collectors;
  * 将 harness 的 {@link GenerateOptions} 序列化为 DeepSeek 聊天补全 API 请求，
  * 解析 SSE 响应并翻译为 {@link StreamChunk} 协议。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public class DeepSeekAdapter extends LlmAdapter {
 
     private static final String DEFAULT_BASE_URL = "https://api.deepseek.com";
     private static final String API_KEY_ENV = "DEEPSEEK_API_KEY";
+    private static final String DATA_LINE_PREFIX = "data: ";
     private static final Duration TIMEOUT = Duration.ofSeconds(60);
 
     private final HttpClient httpClient;
@@ -77,15 +84,15 @@ public class DeepSeekAdapter extends LlmAdapter {
                     .thenAccept(response -> {
                         if (response.statusCode() != 200) {
                             var body = response.body().collect(Collectors.joining());
-                            callback.onError(new RuntimeException(
+                            callback.onError(new LlmException(
                                     "DeepSeek API 返回 " + response.statusCode() + ": " + body));
                             return;
                         }
                         try {
                             var textBuilder = new StringBuilder();
                             response.body().forEach(line -> {
-                                if (!line.startsWith("data: ")) return;
-                                var data = line.substring(6).trim();
+                                if (!line.startsWith(DATA_LINE_PREFIX)) return;
+                                var data = line.substring(DATA_LINE_PREFIX.length()).trim();
                                 if ("[DONE]".equals(data) || data.isEmpty()) return;
                                 parseChunk(data, textBuilder, callback);
                             });
@@ -121,7 +128,7 @@ public class DeepSeekAdapter extends LlmAdapter {
         var content = extractJsonString(json, "content");
         if (content != null && !content.isEmpty()) {
             if (firstChunk) {
-                callback.onChunk(new StreamChunk.BlockStart(0, "text"));
+                callback.onChunk(new StreamChunk.BlockStart(0, SessionEventTypes.BLOCK_TEXT));
                 firstChunk = false;
             }
             textBuf.append(content);
@@ -148,7 +155,7 @@ public class DeepSeekAdapter extends LlmAdapter {
                 currentToolCallName = toolCallName != null ? toolCallName : "";
                 currentToolCallArgs.setLength(0);
                 if (!toolCallBlockStarted) {
-                    callback.onChunk(new StreamChunk.BlockStart(1, "tool-call"));
+                    callback.onChunk(new StreamChunk.BlockStart(1, SessionEventTypes.BLOCK_TOOL_CALL));
                     toolCallBlockStarted = true;
                 }
             }
@@ -158,7 +165,7 @@ public class DeepSeekAdapter extends LlmAdapter {
                 currentToolCallArgs.append(toolCallArgs);
                 if (currentToolCallId != null) {
                     callback.onChunk(new StreamChunk.ToolCallDelta(
-                            1, new dev.dsh.util.CallId(currentToolCallId),
+                            1, new CallId(currentToolCallId),
                             currentToolCallName, toolCallArgs));
                 }
             }
@@ -168,7 +175,7 @@ public class DeepSeekAdapter extends LlmAdapter {
         var finish = extractJsonString(json, "finish_reason");
         if (finish != null && !finish.isEmpty() && !"null".equals(finish)) {
             if (hasToolCalls && currentToolCallId != null) {
-                var id = new dev.dsh.util.CallId(currentToolCallId);
+                var id = new CallId(currentToolCallId);
                 callback.onChunk(new StreamChunk.ToolCallDelta(
                         1, id, currentToolCallName, currentToolCallArgs.toString()
                 ));
@@ -353,7 +360,8 @@ public class DeepSeekAdapter extends LlmAdapter {
                             + escapeJson(text) + "\"}");
                 }
                 case Message.ToolResultMessage toolMsg -> {
-                    if (toolMsg.content().getFirst() instanceof ContentBlock.ToolResult tr) {
+                    if (!toolMsg.content().isEmpty()
+                            && toolMsg.content().getFirst() instanceof ContentBlock.ToolResult tr) {
                         var text = flattenText(tr.content());
                         messages.add("      {\"role\": \"tool\", \"tool_call_id\": \""
                                 + tr.toolCallId() + "\", \"content\": \""

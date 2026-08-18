@@ -2,6 +2,12 @@ package dev.dsh.model.session;
 
 import dev.dsh.util.CallId;
 
+/**
+ * 工具调用事件。
+ *
+ * @author zhangyl
+ * @date 2026-08-18
+ */
 public record SessionEventToolCall(
         int seq, long time, boolean ignorable,
         SurfaceOp surfaceOp, int[] sourceEventSeqs,
@@ -10,5 +16,8 @@ public record SessionEventToolCall(
     public SessionEventToolCall(int seq, int turn, int step, CallId callId, String name, String arguments) {
         this(seq, System.currentTimeMillis(), false, null, null, turn, step, callId, name, arguments);
     }
-    @Override public String type() { return SessionEventTypes.TOOL_CALL; }
+    @Override
+    public String type() {
+        return SessionEventTypes.TOOL_CALL;
+    }
 }

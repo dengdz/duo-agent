@@ -1,6 +1,10 @@
 package dev.dsh.core.llm;
 
-import dev.dsh.model.llm.*;
+import dev.dsh.model.llm.PromptAssembly;
+import dev.dsh.model.llm.PromptContext;
+import dev.dsh.model.llm.PromptSection;
+import dev.dsh.model.llm.ToolProviderResult;
+import dev.dsh.model.llm.ToolSchema;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -10,11 +14,14 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * {@link SystemPromptImpl} 的测试。
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 class SystemPromptImplTest {
 
     @Test
-    void 默认注册包含harness身份() {
+    void testAssemble_whenDefault_thenIncludesIdentity() {
         var sp = new SystemPromptImpl("", true);
         var assembly = sp.assemble();
 
@@ -23,7 +30,7 @@ class SystemPromptImplTest {
     }
 
     @Test
-    void section按order排序() {
+    void testAssemble_whenSectionsGiven_thenSortedByOrder() {
         var sp = new SystemPromptImpl("", false);
         sp.section(new PromptSection("middle", 100, "middle text"));
         sp.section(new PromptSection("first", -50, "first text"));
@@ -39,7 +46,7 @@ class SystemPromptImplTest {
     }
 
     @Test
-    void 重复section抛出异常() {
+    void testSection_whenDuplicateName_thenThrows() {
         var sp = new SystemPromptImpl("", false);
         sp.section(new PromptSection("test", 0, "text"));
         assertThrows(IllegalArgumentException.class, () ->
@@ -48,7 +55,7 @@ class SystemPromptImplTest {
     }
 
     @Test
-    void section注册后出现在assembly中() {
+    void testSection_whenRegistered_thenInAssembly() {
         var sp = new SystemPromptImpl("", false);
         sp.section(new PromptSection("custom", 50, "custom text"));
 
@@ -61,7 +68,7 @@ class SystemPromptImplTest {
     }
 
     @Test
-    void context按order排序() {
+    void testAssemble_whenContextsGiven_thenSortedByOrder() {
         var sp = new SystemPromptImpl("", false);
         sp.context(new PromptContext("ctx2", 200, "second"));
         sp.context(new PromptContext("ctx1", 100, "first"));
@@ -73,7 +80,7 @@ class SystemPromptImplTest {
     }
 
     @Test
-    void toolProvider贡献schema() {
+    void testAssemble_whenToolProvider_thenCollectsSchemas() {
         var sp = new SystemPromptImpl("", false);
         sp.tools(assembly -> new ToolProviderResult(List.of(
                 new ToolSchema("tool1", "First tool", Map.of("type", "object"))
@@ -85,7 +92,7 @@ class SystemPromptImplTest {
     }
 
     @Test
-    void completeSection独占prompt() {
+    void testAssemble_whenCompleteSection_thenOnlyComplete() {
         var sp = new SystemPromptImpl("", false);
         sp.section(new PromptSection("normal", 100, "normal text"));
         sp.section(new PromptSection("complete", 200, "COMPLETE", true));
@@ -96,7 +103,7 @@ class SystemPromptImplTest {
     }
 
     @Test
-    void 多completeSection抛出异常() {
+    void testAssemble_whenMultipleComplete_thenThrows() {
         var sp = new SystemPromptImpl("", false);
         sp.section(new PromptSection("a", 0, "a", true));
         sp.section(new PromptSection("b", 1, "b", true));
@@ -105,7 +112,7 @@ class SystemPromptImplTest {
     }
 
     @Test
-    void renderPrompt连接section() {
+    void testRenderPrompt_whenSections_thenJoinedWithBlankLine() {
         var sp = new SystemPromptImpl("", false);
         sp.section(new PromptSection("a", 0, "Hello"));
         sp.section(new PromptSection("b", 1, "World"));
@@ -116,7 +123,7 @@ class SystemPromptImplTest {
     }
 
     @Test
-    void renderPrompt跳过空section() {
+    void testRenderPrompt_whenEmptySection_thenSkipped() {
         var sp = new SystemPromptImpl("", false);
         sp.section(new PromptSection("a", 0, ""));
         sp.section(new PromptSection("b", 1, "Visible"));
@@ -127,7 +134,7 @@ class SystemPromptImplTest {
     }
 
     @Test
-    void 变量插值替换() {
+    void testRenderPrompt_whenVariable_thenInterpolated() {
         var sp = new SystemPromptImpl("", false);
         sp.variable("model", ctx -> "deepseek-v4");
         sp.section(new PromptSection("test", 0, "You are {{model}}."));
@@ -138,7 +145,7 @@ class SystemPromptImplTest {
     }
 
     @Test
-    void 未知变量抛出异常() {
+    void testRenderPrompt_whenUnknownVariable_thenThrows() {
         var sp = new SystemPromptImpl("", false);
         sp.section(new PromptSection("test", 0, "{{unknown}}"));
 
@@ -149,7 +156,7 @@ class SystemPromptImplTest {
     }
 
     @Test
-    void section注册和dispose() throws Exception {
+    void testSection_whenDisposed_thenRemoved() throws Exception {
         var sp = new SystemPromptImpl("", false);
         var disposer = sp.section(new PromptSection("temp", 0, "temp text"));
         // 2 = deployment:persona + temp
@@ -161,7 +168,7 @@ class SystemPromptImplTest {
     }
 
     @Test
-    void 多个toolProvider合并schema() {
+    void testAssemble_whenMultipleProviders_thenMergesSchemas() {
         var sp = new SystemPromptImpl("", false);
         sp.tools(assembly -> new ToolProviderResult(List.of(
                 new ToolSchema("tool_a", "A", Map.of("type", "object"))

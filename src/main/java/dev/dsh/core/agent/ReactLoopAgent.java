@@ -5,6 +5,7 @@ import dev.dsh.api.agent.AgentCancelCause;
 import dev.dsh.api.agent.AgentOptions;
 import dev.dsh.api.agent.AgentStatus;
 import dev.dsh.api.agent.CancelOptions;
+import dev.dsh.api.agent.Inbox;
 import dev.dsh.api.agent.InboxTarget;
 import dev.dsh.api.llm.LlmRuntime;
 import dev.dsh.api.llm.StreamCallback;
@@ -21,6 +22,7 @@ import dev.dsh.model.llm.Message;
 import dev.dsh.model.llm.MessageFactory;
 import dev.dsh.model.llm.StreamChunk;
 import dev.dsh.model.llm.LlmFailure;
+import dev.dsh.model.llm.ToolExecutionResult;
 import dev.dsh.model.session.SessionEventAssistantChunk;
 import dev.dsh.model.session.SessionEventAssistantMessage;
 import dev.dsh.model.session.SessionEventStepEnd;
@@ -41,6 +43,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
@@ -51,8 +55,15 @@ import java.util.concurrent.atomic.AtomicReference;
  * 实现核心 turn/step 状态机、session 日志、inbox 消息流转、LLM 调用和 system-prompt 组装。
  * 简化版跳过：agent/pre-step/request/turn-stopping 等拦截器、工具执行。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public class ReactLoopAgent implements Agent {
+
+    private static final String DEFAULT_PROVIDER = "mock-echo";
+    private static final String DEFAULT_MODEL = "mock-model";
+    private static final long LLM_CALL_TIMEOUT_SECONDS = 60;
 
     // ---- 状态机 ----
 
@@ -75,6 +86,7 @@ public class ReactLoopAgent implements Agent {
     private final LlmRuntime llmRuntime;
     private final SystemPrompt systemPrompt;
     private final ToolRegistry toolRegistry;
+    private final Executor driverExecutor;
 
     private volatile Phase phase;
     private volatile CompletableFuture<Void> activity = CompletableFuture.completedFuture(null);
@@ -90,6 +102,9 @@ public class ReactLoopAgent implements Agent {
         this.llmRuntime = llmRuntime;
         this.systemPrompt = systemPrompt;
         this.toolRegistry = toolRegistry;
+        // 命名的虚拟线程执行器：统一驱动线程的创建与命名，便于排查
+        this.driverExecutor = Executors.newThreadPerTaskExecutor(
+                Thread.ofVirtual().name("agent-driver-", 0).factory());
         // 从 session 日志恢复最后 turn 号
         int lastTurn = 0;
         for (var e : session.events()) {
@@ -100,10 +115,25 @@ public class ReactLoopAgent implements Agent {
 
     // ---- Agent 接口实现 ----
 
-    @Override public SessionId id() { return id; }
-    @Override public AgentOptions options() { return options; }
-    @Override public Session session() { return session; }
-    @Override public Inbox inbox() { return inbox; }
+    @Override
+    public SessionId id() {
+        return id;
+    }
+
+    @Override
+    public AgentOptions options() {
+        return options;
+    }
+
+    @Override
+    public Session session() {
+        return session;
+    }
+
+    @Override
+    public Inbox inbox() {
+        return inbox;
+    }
 
     @Override
     public AgentStatus status() {
@@ -131,9 +161,20 @@ public class ReactLoopAgent implements Agent {
         if (wakeup) wakeDriver();
     }
 
-    @Override public void followup(Message msg) { send(msg, InboxTarget.NEXT_TURN, true); }
-    @Override public void steer(Message msg) { send(msg, InboxTarget.NEXT_STEP, true); }
-    @Override public void inject(Message msg) { send(msg, InboxTarget.NEXT_STEP, false); }
+    @Override
+    public void followup(Message msg) {
+        send(msg, InboxTarget.NEXT_TURN, true);
+    }
+
+    @Override
+    public void steer(Message msg) {
+        send(msg, InboxTarget.NEXT_STEP, true);
+    }
+
+    @Override
+    public void inject(Message msg) {
+        send(msg, InboxTarget.NEXT_STEP, false);
+    }
 
     // ---- 驱动 ----
 
@@ -147,7 +188,7 @@ public class ReactLoopAgent implements Agent {
         activity = fut;
         phase = new Running(p.lastTurn + 1, 0, false);
 
-        Thread.startVirtualThread(() -> {
+        driverExecutor.execute(() -> {
             try {
                 runLoop();
                 fut.complete(null);
@@ -227,8 +268,8 @@ public class ReactLoopAgent implements Agent {
 
     /** 执行一次模型调用。返回 step 结束原因。 */
     private TurnEndReason executeStep(int turn, int step) throws AgentLoopException {
-        var provider = options.provider() != null ? options.provider() : "mock-echo";
-        var model = options.model() != null ? options.model() : "mock-model";
+        var provider = options.provider() != null ? options.provider() : DEFAULT_PROVIDER;
+        var model = options.model() != null ? options.model() : DEFAULT_MODEL;
         var messages = session.deriveMessages();
 
         // 组装 system prompt
@@ -236,8 +277,7 @@ public class ReactLoopAgent implements Agent {
         var system = SystemPromptImpl.renderPrompt(assembly);
         var tools = assembly.tools().isEmpty() ? null : assembly.tools();
 
-        var request = new GenerateOptions(provider, model, messages, system, tools,
-                null, null, null, null);
+        var request = new GenerateOptions(provider, model, messages, system, tools);
 
         var assembler = new BlockAssembler();
         var chunkSeqs = new ArrayList<Integer>();
@@ -259,7 +299,7 @@ public class ReactLoopAgent implements Agent {
         });
 
         try {
-            barrier.get(60, TimeUnit.SECONDS);
+            barrier.get(LLM_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new AgentLoopException("LLM 调用被中断", e);
@@ -297,15 +337,13 @@ public class ReactLoopAgent implements Agent {
                     session.seq(), turn, step, tc.id(), tc.name(), tc.arguments()
             ));
 
-            // 解析参数
-            Map<String, Object> args;
+            // 解析参数；失败时以错误结果返回给模型，避免工具在错误参数下静默执行
+            ToolExecutionResult result;
             try {
-                args = parseJsonArgs(tc.arguments());
-            } catch (Exception e) {
-                args = Map.of();
+                result = toolRegistry.execute(tc.name(), parseJsonArgs(tc.arguments()));
+            } catch (IllegalArgumentException e) {
+                result = new ToolExecutionResult(e);
             }
-
-            var result = toolRegistry.execute(tc.name(), args);
 
             var toolResultMsg = MessageFactory.createToolResultMessage(tc.id(), result.content(), result.isError());
             session.append(new SessionEventToolResult(
@@ -320,22 +358,18 @@ public class ReactLoopAgent implements Agent {
         return null;
     }
 
-    /** 解析 JSON 参数为嵌套结构。 */
+    /** 解析 JSON 参数为嵌套结构；非法输入抛出 IllegalArgumentException。 */
     Map<String, Object> parseJsonArgs(String json) {
         if (json == null || json.isBlank()) return Map.of();
-        try {
-            var parsed = dev.dsh.util.JsonParser.parse(json);
-            if (parsed instanceof Map<?, ?> m) {
-                var result = new java.util.LinkedHashMap<String, Object>();
-                for (var e : m.entrySet()) {
-                    result.put(String.valueOf(e.getKey()), e.getValue());
-                }
-                return result;
-            }
-        } catch (IllegalArgumentException e) {
-            // 解析失败降级为空参数
+        var parsed = dev.dsh.util.JsonParser.parse(json);
+        if (!(parsed instanceof Map<?, ?> m)) {
+            throw new IllegalArgumentException("工具参数必须是 JSON 对象");
         }
-        return Map.of();
+        var result = new java.util.LinkedHashMap<String, Object>();
+        for (var e : m.entrySet()) {
+            result.put(String.valueOf(e.getKey()), e.getValue());
+        }
+        return result;
     }
 
     /** 从 phase 中提取最后 turn 号。 */

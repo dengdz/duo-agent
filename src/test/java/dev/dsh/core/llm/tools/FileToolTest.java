@@ -9,13 +9,19 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * {@link FileWriteTool} 与 {@link FileReadTool} 的测试。
+ *
+ * @author zhangyl
+ * @date 2026-08-18
+ */
 class FileToolTest {
 
     @TempDir
     Path tempDir;
 
     @Test
-    void 读写文件往返() {
+    void testWriteRead_whenValidPath_thenRoundTripsContent() {
         var registry = new ToolRegistryImpl();
         registry.register(new FileWriteTool().getDefinition());
         registry.register(new FileReadTool().getDefinition());
@@ -33,7 +39,7 @@ class FileToolTest {
     }
 
     @Test
-    void 读取不存在的文件返回错误() {
+    void testRead_whenFileMissing_thenReturnsError() {
         var registry = new ToolRegistryImpl();
         registry.register(new FileReadTool().getDefinition());
 
@@ -46,7 +52,7 @@ class FileToolTest {
     }
 
     @Test
-    void 覆盖已存在文件() {
+    void testWrite_whenFileExists_thenOverwrites() {
         var registry = new ToolRegistryImpl();
         registry.register(new FileWriteTool().getDefinition());
         registry.register(new FileReadTool().getDefinition());

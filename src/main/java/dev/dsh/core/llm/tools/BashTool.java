@@ -4,10 +4,13 @@ import dev.dsh.model.llm.ToolDefinition;
 import dev.dsh.model.llm.ToolExecutionResult;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -16,6 +19,9 @@ import java.util.concurrent.TimeUnit;
  * 对应原版 harness 中的 bash/terminal 工具能力。
  * 默认工作目录为当前进程启动目录，可通 {@code cwd} 参数覆盖。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public class BashTool {
 
@@ -77,19 +83,26 @@ public class BashTool {
                     .redirectErrorStream(true)
                     .start();
 
-            var finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
-            if (!finished) {
+            // 先异步读取输出再等待退出：若先 waitFor，子进程输出超过管道缓冲时会
+            // 阻塞在写端，父进程等不到退出而误判超时
+            var outputFuture = CompletableFuture.supplyAsync(() -> {
+                try (var input = process.getInputStream()) {
+                    return input.readNBytes(MAX_OUTPUT_BYTES);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
+
+            if (!process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
                 process.destroyForcibly();
                 return new ToolExecutionResult("错误：命令执行超时（" + timeoutSeconds + " 秒）");
             }
 
-            String output;
-            try (var input = process.getInputStream()) {
-                var bytes = input.readNBytes(MAX_OUTPUT_BYTES);
-                output = new String(bytes, StandardCharsets.UTF_8);
-                if (bytes.length >= MAX_OUTPUT_BYTES) {
-                    output += "\n...（输出已截断）";
-                }
+            // 进程已退出，管道已关闭，读取必然结束
+            var bytes = outputFuture.join();
+            var output = new String(bytes, StandardCharsets.UTF_8);
+            if (bytes.length >= MAX_OUTPUT_BYTES) {
+                output += "\n...（输出已截断）";
             }
 
             var exitCode = process.exitValue();

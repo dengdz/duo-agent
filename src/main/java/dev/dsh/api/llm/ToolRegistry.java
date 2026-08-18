@@ -11,6 +11,9 @@ import java.util.Map;
  * <p>
  * 对应 TS 源码中的 {@code ctx.tools}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public interface ToolRegistry {
 

@@ -4,6 +4,9 @@ import java.util.List;
 
 /**
  * 工具执行结果。
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public record ToolExecutionResult(
         /** 是否执行失败。 */

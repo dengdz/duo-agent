@@ -5,6 +5,9 @@ package dev.dsh.api.agent;
  * <p>
  * 对应 TS 源码中的 {@code AgentOptions}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public record AgentOptions(
         /** 提供方路由（调用时必须有已注册的适配器）。 */

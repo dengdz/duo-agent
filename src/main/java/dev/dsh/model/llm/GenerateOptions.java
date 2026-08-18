@@ -7,6 +7,9 @@ import java.util.List;
  * <p>
  * 对应 TS 源码中的 {@code GenerateOptions}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public record GenerateOptions(
         /** 选择适配器的已注册提供方路由。 */
@@ -40,5 +43,11 @@ public record GenerateOptions(
     /** 创建仅含 provider、model 和 messages 的最小请求。 */
     public GenerateOptions(String provider, String model, List<Message> messages) {
         this(provider, model, messages, null, null, null, null, null, null);
+    }
+
+    /** 创建含 system 提示与工具 schema 的请求（无温度/停止等可选参数）。 */
+    public GenerateOptions(String provider, String model, List<Message> messages,
+                           String system, List<ToolSchema> tools) {
+        this(provider, model, messages, system, tools, null, null, null, null);
     }
 }

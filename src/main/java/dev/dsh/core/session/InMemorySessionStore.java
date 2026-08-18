@@ -1,5 +1,6 @@
 package dev.dsh.core.session;
 
+import dev.dsh.api.agent.SessionStore;
 import dev.dsh.model.session.CreateSessionOptions;
 import dev.dsh.model.session.SessionEvent;
 import dev.dsh.model.session.SessionEventTurnEnd;
@@ -13,15 +14,20 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 内存会话存储（{@code ctx.sessions}）。
+ * 内存会话存储——{@link SessionStore} 的默认实现。
  * <p>
  * 持久化不在此实现——持久化插件订阅 {@code session/event} 并在 flush/dispose 时写入。
  * </p>
  * <p>
  * 对应 TS 源码中的 {@code SessionStore}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
-public class SessionStore {
+public class InMemorySessionStore implements SessionStore {
+
+    private static final String SESSION_ID_PREFIX = "session-";
 
     private final Map<SessionId, Session> store = new ConcurrentHashMap<>();
     private final AtomicInteger counter = new AtomicInteger(0);
@@ -32,10 +38,11 @@ public class SessionStore {
      * 简化的 create 方法：prepare + enter 一步完成。
      * </p>
      */
+    @Override
     public Session create(SessionId id, CreateSessionOptions options) {
         if (id == null) {
             do {
-                id = new SessionId("session-" + counter.incrementAndGet());
+                id = new SessionId(SESSION_ID_PREFIX + counter.incrementAndGet());
             } while (store.containsKey(id));
         }
         if (store.containsKey(id)) {
@@ -61,32 +68,31 @@ public class SessionStore {
     }
 
     /** 创建会话，使用默认选项。 */
+    @Override
     public Session create() {
         return create(null, null);
     }
 
     /** 创建会话，指定 id。 */
+    @Override
     public Session create(SessionId id) {
         return create(id, null);
     }
 
-    /**
-     * 移除并销毁一个会话。
-     */
+    /** 移除并销毁一个会话。 */
+    @Override
     public void dispose(SessionId id) {
         store.remove(id);
     }
 
-    /**
-     * 查找一个活跃会话。
-     */
+    /** 查找一个活跃会话。 */
+    @Override
     public Session get(SessionId id) {
         return store.get(id);
     }
 
-    /**
-     * 所有活跃会话，按创建顺序。
-     */
+    /** 所有活跃会话，按创建顺序。 */
+    @Override
     public List<Session> list() {
         return List.copyOf(store.values());
     }
@@ -97,6 +103,7 @@ public class SessionStore {
      * 对应 TS 源码中的 {@code SessionStore.fork}。
      * </p>
      */
+    @Override
     public Session fork(Session source, Integer boundary, SessionId childId) {
         if (childId != null && store.containsKey(childId)) {
             throw new IllegalArgumentException("子会话 \"" + childId + "\" 已存在");
@@ -104,7 +111,9 @@ public class SessionStore {
 
         var events = source.events();
         var endSeq = boundary != null ? boundary : events.size() - 1;
-        if (endSeq < 0) endSeq = 0;
+        if (endSeq < 0) {
+            endSeq = 0;
+        }
 
         // 验证边界不在打开的 turn 内
         // （简化版：仅简单检查事件序列）
@@ -112,8 +121,12 @@ public class SessionStore {
             var hasOpenTurn = false;
             for (int i = 0; i <= endSeq; i++) {
                 var event = events.get(i);
-                if (event instanceof SessionEventTurnStart) hasOpenTurn = true;
-                if (event instanceof SessionEventTurnEnd) hasOpenTurn = false;
+                if (event instanceof SessionEventTurnStart) {
+                    hasOpenTurn = true;
+                }
+                if (event instanceof SessionEventTurnEnd) {
+                    hasOpenTurn = false;
+                }
             }
             if (hasOpenTurn) {
                 throw new IllegalArgumentException("fork 边界不能在打开的 turn 内");
@@ -137,6 +150,7 @@ public class SessionStore {
     }
 
     /** 从父会话 fork 一个子会话（不指定边界 = 当前最后事件）。 */
+    @Override
     public Session fork(Session source) {
         return fork(source, null, null);
     }

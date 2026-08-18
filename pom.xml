@@ -16,6 +16,9 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- 真实 API 集成测试（@Tag("integration")）默认排除；
+             运行时用 -Dsurefire.excludedGroups= 放行（仍需 DEEPSEEK_API_KEY） -->
+        <surefire.excludedGroups>integration</surefire.excludedGroups>
     </properties>
 
     <dependencies>
@@ -36,6 +39,14 @@
                 <configuration>
                     <source>21</source>
                     <target>21</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+                <configuration>
+                    <excludedGroups>${surefire.excludedGroups}</excludedGroups>
                 </configuration>
             </plugin>
         </plugins>

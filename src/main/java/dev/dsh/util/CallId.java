@@ -3,6 +3,9 @@ package dev.dsh.util;
 /**
  * 提供方颁发的工具调用 ID 的不透明包装类型。
  * 对应 TS 源码中的 {@code Branded<'CallId'>}。
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public record CallId(String value) {
     public CallId {

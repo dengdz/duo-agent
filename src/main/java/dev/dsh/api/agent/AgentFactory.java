@@ -7,6 +7,9 @@ import dev.dsh.exception.AgentCreationException;
  * <p>
  * 对应 TS 源码中的 {@code AgentFactory} 接口。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public interface AgentFactory {
 

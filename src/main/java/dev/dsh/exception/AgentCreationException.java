@@ -2,6 +2,9 @@ package dev.dsh.exception;
 
 /**
  * Agent 创建或恢复失败时抛出的异常。
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public class AgentCreationException extends Exception {
 

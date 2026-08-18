@@ -5,6 +5,9 @@ package dev.dsh.api.agent;
  * <p>
  * 对应 TS 源码中的 {@code CancelOptions}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public record CancelOptions(
         /** 保留排队和 steering 的 inbox 项目，而不是丢弃它们。 */

@@ -15,12 +15,12 @@ Java 21 + Maven 多模块项目，位于 `/Users/zhangyl/IdeaProjects/mp-agent`�
 | LlmAdapter | `api/llm/LlmAdapter.java` | `packages/llm/llm/src/index.ts` | ✅ |
 | DeepSeekAdapter | `core/llm/deepseek/DeepSeekAdapter.java` | `packages/llm/llm-deepseek/` | ✅ |
 | Session 事件日志 | `core/session/Session.java` | `packages/core/session/src/index.ts` | ✅ |
-| SessionStore | `core/session/SessionStore.java` | `packages/core/session/src/index.ts` | ✅ |
+| SessionStore | `api/agent/SessionStore.java`（接口）+ `core/session/InMemorySessionStore.java`（内存实现） | `packages/core/session/src/index.ts` | ✅ |
 | SurfaceManager | `core/session/surface/SurfaceManager.java` | `packages/core/session/src/surface.ts` | ✅ |
 | 会话事件类型 | `model/session/` (SessionEvent 系 13 个文件) | `packages/core/session/src/types.ts` | ✅ |
 | Agent 接口 | `api/agent/Agent.java` | `packages/core/agent/src/runtime-types.ts` | ✅ |
 | AgentRegistry | `api/agent/AgentRegistry.java` | `packages/core/agent/src/index.ts` | ✅ |
-| Inbox | `core/agent/Inbox.java` | `packages/core/agent/src/inbox.ts` | ✅ |
+| Inbox | `api/agent/Inbox.java` | `packages/core/agent/src/inbox.ts` | ✅ |
 | ReactLoopAgent | `core/agent/ReactLoopAgent.java` | `packages/core/agent-loop/src/agent.ts` | ✅ |
 | SystemPrompt | `api/llm/SystemPrompt.java` + `core/llm/SystemPromptImpl.java` | `packages/core/system-prompt/src/index.ts` | ✅ |
 | ToolRegistry | `api/llm/ToolRegistry.java` + `core/llm/ToolRegistryImpl.java` | `packages/core/tools/src/index.ts` | ✅ |
@@ -58,7 +58,7 @@ exception/ ← 业务异常
 util/    ← 通用工具
 ```
 
-依赖方向：`model → api → core`
+依赖方向：`core → api → model`、`* → util`（util 为最底层）。已按阿里规范 PRJ-01 治理：`Inbox`/`SessionStore` 契约下沉至 `api/agent/`，存储实现为 `core/session/InMemorySessionStore`；`api` 仅保留对 `core/session/Session` 的 **2 处明示豁免引用**（Session 是库内领域类型，待持久化时拆接口）。
 
 ## 关键技术决策
 

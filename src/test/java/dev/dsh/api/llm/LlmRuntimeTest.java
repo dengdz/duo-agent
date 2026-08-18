@@ -3,7 +3,10 @@ package dev.dsh.api.llm;
 import dev.dsh.model.llm.Message;
 import dev.dsh.model.llm.MessageFactory;
 import dev.dsh.model.llm.MessageSource;
-import dev.dsh.model.llm.*;
+import dev.dsh.model.llm.ContentBlock;
+import dev.dsh.model.llm.FinishReason;
+import dev.dsh.model.llm.GenerateOptions;
+import dev.dsh.model.llm.StreamChunk;
 import dev.dsh.core.llm.MockEchoAdapter;
 import org.junit.jupiter.api.Test;
 
@@ -16,6 +19,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * {@link LlmRuntime} 与 mock echo 适配器的测试。
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 class LlmRuntimeTest {
 

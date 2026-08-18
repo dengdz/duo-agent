@@ -8,6 +8,9 @@ import dev.dsh.model.session.SessionId;
  * <p>
  * 对应 TS 源码中的 {@code CreateAgentOptions}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public record CreateAgentOptions(
         SessionId sessionId,

@@ -7,6 +7,9 @@ import dev.dsh.util.CallId;
  * <p>
  * 对应 TS 源码中的 {@code MessageSourceMap}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public sealed interface MessageSource {
 

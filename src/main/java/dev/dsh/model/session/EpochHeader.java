@@ -5,6 +5,9 @@ package dev.dsh.model.session;
  * <p>
  * 对应 TS 源码中的 {@code EpochHeader}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public record EpochHeader(
         String provider,

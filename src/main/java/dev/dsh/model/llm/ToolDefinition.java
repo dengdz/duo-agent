@@ -7,6 +7,9 @@ import java.util.Map;
  * <p>
  * 对应 TS 源码中的 {@code ToolDefinition}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public record ToolDefinition(
         String name,

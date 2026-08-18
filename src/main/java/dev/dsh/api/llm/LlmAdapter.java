@@ -10,6 +10,9 @@ import dev.dsh.model.llm.GenerateOptions;
  * <p>
  * 对应 TS 源码中的 {@code LlmAdapter}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public abstract class LlmAdapter {
 

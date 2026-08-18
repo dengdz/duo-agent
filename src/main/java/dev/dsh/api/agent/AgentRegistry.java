@@ -1,9 +1,6 @@
 package dev.dsh.api.agent;
 
-import dev.dsh.core.agent.Inbox;
 import dev.dsh.exception.AgentCreationException;
-import dev.dsh.core.session.Session;
-import dev.dsh.core.session.SessionStore;
 import dev.dsh.model.session.SessionEvent;
 import dev.dsh.model.session.SessionId;
 
@@ -16,6 +13,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * 对应 TS 源码中的 {@code AgentRegistry} 类。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public class AgentRegistry {
 

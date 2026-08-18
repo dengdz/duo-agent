@@ -29,6 +29,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * 使用 MockEchoAdapter 模拟一次完整对话。
  * 验证：turn/step 生命周期、session 日志、inbox 流转。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 class ReactLoopAgentTest {
 

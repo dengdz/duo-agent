@@ -9,6 +9,9 @@ package dev.dsh.model.session;
  * <p>
  * 对应 TS 源码中的 {@code SessionEvent}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public sealed interface SessionEvent permits
         SessionEventTurnStart,

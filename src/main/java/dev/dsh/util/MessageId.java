@@ -5,6 +5,9 @@ import java.util.UUID;
 /**
  * 消息的不透明稳定标识。
  * 对应 TS 源码中的 {@code Branded<'MessageId'>}。
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public record MessageId(String value) {
     public MessageId {

@@ -1,5 +1,11 @@
 package dev.dsh.model.session;
 
+/**
+ * step 结束事件。
+ *
+ * @author zhangyl
+ * @date 2026-08-18
+ */
 public record SessionEventStepEnd(
         int seq, long time, boolean ignorable,
         SurfaceOp surfaceOp, int[] sourceEventSeqs,
@@ -8,5 +14,8 @@ public record SessionEventStepEnd(
     public SessionEventStepEnd(int seq, int turn, int step) {
         this(seq, System.currentTimeMillis(), false, null, null, turn, step);
     }
-    @Override public String type() { return SessionEventTypes.STEP_END; }
+    @Override
+    public String type() {
+        return SessionEventTypes.STEP_END;
+    }
 }

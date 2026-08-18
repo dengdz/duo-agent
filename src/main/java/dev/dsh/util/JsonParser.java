@@ -11,6 +11,9 @@ import java.util.Map;
  * 将 JSON 文本转换为嵌套的 {@code Map<String,Object> / List<Object> / String / Number / Boolean / null}，
  * 不依赖任何第三方库，保持项目零运行时依赖。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public final class JsonParser {
 

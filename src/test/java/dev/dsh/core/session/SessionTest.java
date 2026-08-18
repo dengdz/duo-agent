@@ -6,7 +6,16 @@ import dev.dsh.model.llm.MessageSource;
 import dev.dsh.model.llm.ContentBlock;
 import dev.dsh.model.llm.StreamChunk;
 import dev.dsh.model.llm.TokenUsage;
-import dev.dsh.model.session.*;
+import dev.dsh.model.session.EpochHeader;
+import dev.dsh.model.session.SessionEventAssistantMessage;
+import dev.dsh.model.session.SessionEventRequestHeader;
+import dev.dsh.model.session.SessionEventStepStart;
+import dev.dsh.model.session.SessionEventTurnEnd;
+import dev.dsh.model.session.SessionEventTurnStart;
+import dev.dsh.model.session.SessionEventUserMessage;
+import dev.dsh.model.session.SessionId;
+import dev.dsh.model.session.SurfaceOp;
+import dev.dsh.model.session.TurnEndReason;
 import dev.dsh.util.CallId;
 import org.junit.jupiter.api.Test;
 
@@ -20,6 +29,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * 覆盖：事件追加、不可变快照、seq 连续、表面事件、deriveMessages、
  * requestHeader 折叠、表面替换。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 class SessionTest {
 
@@ -190,7 +202,7 @@ class SessionTest {
 
     @Test
     void shouldForkChildSession() {
-        var store = new SessionStore();
+        var store = new InMemorySessionStore();
         var parent = store.create(new SessionId("parent"));
 
         // 追加一些事件

@@ -9,6 +9,9 @@ import java.util.List;
  * <p>
  * 对应 TS 源码中的 {@code PreStepDecision}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public sealed interface PreStepDecision {
 

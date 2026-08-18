@@ -5,6 +5,9 @@ package dev.dsh.model.llm;
  * <p>
  * 对应 TS 源码中的 {@code PromptSection}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public record PromptSection(
         /** 唯一名称。 */

@@ -8,6 +8,9 @@ import dev.dsh.util.CallId;
  * 对应 TS 源码中的 {@code ContentBlockMap}。
  * 如需新增块类型，扩展此 sealed 层次结构即可。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public sealed interface ContentBlock {
 

@@ -4,6 +4,7 @@ import dev.dsh.model.llm.ContentBlock;
 import dev.dsh.model.llm.FinishReason;
 import dev.dsh.model.llm.StreamChunk;
 import dev.dsh.model.llm.TokenUsage;
+import dev.dsh.model.session.SessionEventTypes;
 import dev.dsh.util.CallId;
 
 import java.util.ArrayList;
@@ -28,15 +29,18 @@ import java.util.Optional;
  * <p>
  * 对应 TS 源码中的 {@code BlockAssembler}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public class BlockAssembler {
 
     private static final class PartialBlock {
         String blockType;
-        String text = "";
+        final StringBuilder text = new StringBuilder();
         String toolCallId;
         String toolCallName;
-        String toolCallArguments = "";
+        final StringBuilder toolCallArguments = new StringBuilder();
         /** 由 {@code block-end} 设置——权威数据，冻结此 partial。 */
         ContentBlock block;
     }
@@ -62,21 +66,21 @@ public class BlockAssembler {
                 }
             }
             case StreamChunk.TextDelta td -> {
-                var partial = ensure(td.index(), "text");
+                var partial = ensure(td.index(), SessionEventTypes.BLOCK_TEXT);
                 if (partial.block != null) return; // 被 block-end 关闭；忽略掉队者
-                partial.text += td.text();
+                partial.text.append(td.text());
             }
             case StreamChunk.ReasoningDelta rd -> {
-                var partial = ensure(rd.index(), "reasoning");
+                var partial = ensure(rd.index(), SessionEventTypes.BLOCK_REASONING);
                 if (partial.block != null) return;
-                partial.text += rd.text();
+                partial.text.append(rd.text());
             }
             case StreamChunk.ToolCallDelta tcd -> {
-                var partial = ensure(tcd.index(), "tool-call");
+                var partial = ensure(tcd.index(), SessionEventTypes.BLOCK_TOOL_CALL);
                 if (partial.block != null) return;
                 if (partial.toolCallId == null) partial.toolCallId = tcd.id().value();
                 if (tcd.name() != null && !tcd.name().isBlank()) partial.toolCallName = tcd.name();
-                partial.toolCallArguments += tcd.argumentsDelta();
+                partial.toolCallArguments.append(tcd.argumentsDelta());
             }
             case StreamChunk.BlockEnd be -> {
                 var partial = ensure(be.index(), blockTypeName(be.block()));
@@ -105,24 +109,24 @@ public class BlockAssembler {
     /** 将 ContentBlock 映射为其类型名称字符串。 */
     private static String blockTypeName(ContentBlock block) {
         return switch (block) {
-            case ContentBlock.Text ignored -> "text";
-            case ContentBlock.Reasoning ignored -> "reasoning";
-            case ContentBlock.ToolCall ignored -> "tool-call";
-            case ContentBlock.ToolResult ignored -> "tool-result";
+            case ContentBlock.Text ignored -> SessionEventTypes.BLOCK_TEXT;
+            case ContentBlock.Reasoning ignored -> SessionEventTypes.BLOCK_REASONING;
+            case ContentBlock.ToolCall ignored -> SessionEventTypes.BLOCK_TOOL_CALL;
+            case ContentBlock.ToolResult ignored -> SessionEventTypes.BLOCK_TOOL_RESULT;
         };
     }
 
     private ContentBlock assemble(PartialBlock partial, int index) {
         if (partial.block != null) return partial.block;
         return switch (partial.blockType) {
-            case "text" -> new ContentBlock.Text(partial.text);
-            case "reasoning" -> new ContentBlock.Reasoning(partial.text);
-            case "tool-call" -> new ContentBlock.ToolCall(
+            case SessionEventTypes.BLOCK_TEXT -> new ContentBlock.Text(partial.text.toString());
+            case SessionEventTypes.BLOCK_REASONING -> new ContentBlock.Reasoning(partial.text.toString());
+            case SessionEventTypes.BLOCK_TOOL_CALL -> new ContentBlock.ToolCall(
                     partial.toolCallId != null
                             ? new CallId(partial.toolCallId)
                             : new CallId("call-" + index),
                     partial.toolCallName != null ? partial.toolCallName : "",
-                    partial.toolCallArguments
+                    partial.toolCallArguments.toString()
             );
             default -> throw new IllegalStateException(
                     "无法组装类型为 \"" + partial.blockType + "\" 的不完整块"

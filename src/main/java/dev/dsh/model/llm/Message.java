@@ -9,8 +9,16 @@ import java.util.List;
  * <p>
  * 对应 TS 源码中的 {@code Message}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public sealed interface Message {
+
+    /** 用户角色的协议角色名。 */
+    String ROLE_USER = "user";
+    /** 助手角色的协议角色名。 */
+    String ROLE_ASSISTANT = "assistant";
 
     /** 跨所有表示边界保持稳定的标识。 */
     MessageId id();
@@ -32,7 +40,7 @@ public sealed interface Message {
     ) implements Message {
         @Override
         public String role() {
-            return "user";
+            return ROLE_USER;
         }
     }
 
@@ -44,7 +52,7 @@ public sealed interface Message {
     ) implements Message {
         @Override
         public String role() {
-            return "assistant";
+            return ROLE_ASSISTANT;
         }
     }
 
@@ -56,7 +64,7 @@ public sealed interface Message {
     ) implements Message {
         @Override
         public String role() {
-            return "user";
+            return ROLE_USER;
         }
     }
 }

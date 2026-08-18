@@ -4,8 +4,16 @@ import dev.dsh.model.llm.Message;
 import dev.dsh.model.llm.MessageFactory;
 import dev.dsh.model.llm.MessageSource;
 import dev.dsh.model.llm.ContentBlock;
-import dev.dsh.core.session.SurfaceManager;
-import dev.dsh.model.session.*;
+import dev.dsh.model.session.EpochHeader;
+import dev.dsh.model.session.SessionEvent;
+import dev.dsh.model.session.SessionEventAssistantMessage;
+import dev.dsh.model.session.SessionEventRequestHeader;
+import dev.dsh.model.session.SessionEventSessionEndSeed;
+import dev.dsh.model.session.SessionEventToolResult;
+import dev.dsh.model.session.SessionEventTypes;
+import dev.dsh.model.session.SessionEventUserMessage;
+import dev.dsh.model.session.SessionHeader;
+import dev.dsh.model.session.SessionId;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +27,9 @@ import java.util.List;
  * <p>
  * 对应 TS 源码中的 {@code Session} 类。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public class Session {
 
@@ -81,7 +92,7 @@ public class Session {
         // 如果有种子事件且最后一条不是 session/end-seed，追加一条
         if (seed != null && seed.length > 0) {
             var last = log.isEmpty() ? null : log.getLast();
-            if (last == null || !"session/end-seed".equals(last.type())) {
+            if (last == null || !SessionEventTypes.SESSION_END_SEED.equals(last.type())) {
                 append(new SessionEventSessionEndSeed(log.size()));
             }
         }

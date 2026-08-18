@@ -1,6 +1,6 @@
 package dev.dsh.api.agent;
 
-import dev.dsh.core.agent.Inbox;
+import dev.dsh.api.agent.Inbox;
 import dev.dsh.model.llm.Message;
 import dev.dsh.model.llm.MessageFactory;
 import dev.dsh.model.llm.MessageSource;
@@ -18,6 +18,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>
  * 覆盖：Inbox 操作、AgentRegistry 注册和查询、Agent 接口实现。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 class AgentTest {
 

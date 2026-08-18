@@ -5,6 +5,9 @@ package dev.dsh.model.session;
  * <p>
  * 对应 TS 源码中的 {@code SessionHeader}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public record SessionHeader(
         int version,

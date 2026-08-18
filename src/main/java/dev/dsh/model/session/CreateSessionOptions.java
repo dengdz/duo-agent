@@ -5,6 +5,9 @@ package dev.dsh.model.session;
  * <p>
  * 对应 TS 源码中的 {@code CreateSessionOptions}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public record CreateSessionOptions(
         /** 初始重放或 fork 历史。 */
@@ -13,7 +16,9 @@ public record CreateSessionOptions(
         SessionMeta meta
 ) {
     public CreateSessionOptions {
-        if (seed == null) seed = new SessionEvent[0];
+        if (seed == null) {
+            seed = new SessionEvent[0];
+        }
     }
 
     public CreateSessionOptions() {

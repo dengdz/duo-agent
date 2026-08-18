@@ -1,12 +1,20 @@
 package dev.dsh.api.llm;
 
-import dev.dsh.model.llm.*;
+import dev.dsh.model.llm.PromptAssembly;
+import dev.dsh.model.llm.PromptContext;
+import dev.dsh.model.llm.PromptSection;
+import dev.dsh.model.llm.ToolProviderResult;
+
+import java.util.function.Function;
 
 /**
  * 系统提示词服务：管理有序 sections、动态上下文、工具 schema 和 prompt 变量。
  * <p>
  * 对应 TS 源码中的 {@code SystemPrompt} 类。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public interface SystemPrompt {
 
@@ -34,7 +42,7 @@ public interface SystemPrompt {
      * @param provider 为每次组装求值的提供者
      * @return 处置器
      */
-    AutoCloseable tools(java.util.function.Function<PromptAssembly, ToolProviderResult> provider);
+    AutoCloseable tools(Function<PromptAssembly, ToolProviderResult> provider);
 
     /**
      * 注册 prompt 变量。
@@ -42,7 +50,7 @@ public interface SystemPrompt {
      * @param provider 为每次组装求值的提供者，可返回 null
      * @return 处置器
      */
-    AutoCloseable variable(String name, java.util.function.Function<PromptAssembly, String> provider);
+    AutoCloseable variable(String name, Function<PromptAssembly, String> provider);
 
     /**
      * 组装全局和当前作用域的提供者，返回完整的 PromptAssembly。

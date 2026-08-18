@@ -1,12 +1,14 @@
 package dev.dsh.core.session;
 
 import dev.dsh.model.session.SessionEvent;
+import dev.dsh.model.session.SessionEventTypes;
 import dev.dsh.model.session.SurfaceOp;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
+
+import static dev.dsh.model.session.SessionEventTypes.SURFACE_EVENT_TYPES;
 
 /**
  * 会话事件日志之上的表面层：产生 LLM 消息的事件的有序视图。
@@ -18,13 +20,11 @@ import java.util.Set;
  * <p>
  * 对应 TS 源码中的 {@code SurfaceManager} + {@code SessionSurface}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public class SurfaceManager {
-
-    /** 表面事件类型集合。 */
-    private static final Set<String> SURFACE_EVENT_TYPES = Set.of(
-            "user/message", "assistant/message", "tool/result"
-    );
 
     /** 当前表面节点 seq 列表（按模型可见顺序）。 */
     private final List<Integer> nodes = new ArrayList<>();

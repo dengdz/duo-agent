@@ -7,6 +7,9 @@ import java.util.List;
  * <p>
  * 对应 TS 源码中的 {@code ToolProviderResult}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public record ToolProviderResult(
         /** 此提供者为本次组装贡献的 schema。 */

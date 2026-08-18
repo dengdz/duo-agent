@@ -5,6 +5,9 @@ package dev.dsh.api.agent;
  * <p>
  * 对应 TS 源码中的 {@code InboxTarget}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public enum InboxTarget {
     /** 等待单个轮次的提示。 */

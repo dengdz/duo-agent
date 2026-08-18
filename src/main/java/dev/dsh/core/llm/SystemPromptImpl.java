@@ -1,7 +1,13 @@
 package dev.dsh.core.llm;
 
 import dev.dsh.api.llm.SystemPrompt;
-import dev.dsh.model.llm.*;
+import dev.dsh.model.llm.AssembledContext;
+import dev.dsh.model.llm.AssembledSection;
+import dev.dsh.model.llm.PromptAssembly;
+import dev.dsh.model.llm.PromptContext;
+import dev.dsh.model.llm.PromptSection;
+import dev.dsh.model.llm.ToolProviderResult;
+import dev.dsh.model.llm.ToolSchema;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -13,8 +19,6 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
  * SystemPrompt 的默认实现。
@@ -22,6 +26,9 @@ import java.util.stream.Collectors;
  * 管理全局的 section、context、tool provider 和 variable 注册。
  * 简化版跳过 ScopedLayers 和 waterfall，保留核心组装逻辑。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public class SystemPromptImpl implements SystemPrompt {
 
@@ -208,6 +215,6 @@ public class SystemPromptImpl implements SystemPrompt {
         return result.toString();
     }
 
-    private static final java.util.regex.Pattern VARIABLE_NAME =
-            java.util.regex.Pattern.compile("^[a-z][a-z0-9_]*$");
+    private static final Pattern VARIABLE_NAME =
+            Pattern.compile("^[a-z][a-z0-9_]*$");
 }

@@ -7,10 +7,16 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * {@link JsonParser} 的测试。
+ *
+ * @author zhangyl
+ * @date 2026-08-18
+ */
 class JsonParserTest {
 
     @Test
-    void 解析对象与嵌套数组() {
+    void testParse_whenNestedObject_thenParsesArrays() {
         var json = "{\"todos\": [{\"content\": \"买牛奶\", \"status\": \"pending\"}, "
                 + "{\"content\": \"写报告\", \"status\": \"pending\"}]}";
 
@@ -24,7 +30,7 @@ class JsonParserTest {
     }
 
     @Test
-    void 解析基本类型() {
+    void testParse_whenPrimitiveTypes_thenParsesValues() {
         var parsed = (Map<?, ?>) JsonParser.parse(
                 "{\"name\": \"todo_write\", \"n\": 30, \"flag\": true, \"empty\": null, \"pi\": 3.14}");
         assertEquals("todo_write", parsed.get("name"));
@@ -35,19 +41,19 @@ class JsonParserTest {
     }
 
     @Test
-    void 解析转义与空白() {
+    void testParse_whenEscapesAndWhitespace_thenDecodes() {
         var parsed = (Map<?, ?>) JsonParser.parse("  { \"k\": \"a\\\"b\\\\c\\/d\" }  ");
         assertEquals("a\"b\\c/d", parsed.get("k"));
     }
 
     @Test
-    void 非法输入抛异常() {
+    void testParse_whenMalformedJson_thenThrows() {
         assertThrows(IllegalArgumentException.class, () -> JsonParser.parse("{not valid"));
         assertThrows(IllegalArgumentException.class, () -> JsonParser.parse("[1, 2"));
     }
 
     @Test
-    void 顶层数组() {
+    void testParse_whenTopLevelArray_thenParsesList() {
         var parsed = (List<?>) JsonParser.parse("[1, \"two\", false]");
         assertEquals(List.of(1, "two", false), parsed);
     }

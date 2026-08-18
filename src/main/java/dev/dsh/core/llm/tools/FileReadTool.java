@@ -13,6 +13,9 @@ import java.util.Map;
 
 /**
  * file_read 工具：读取指定文件内容。
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public class FileReadTool {
 

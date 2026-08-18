@@ -13,6 +13,9 @@ import java.util.Objects;
  * {@code createToolResultMessage}。
  * 所有返回的消息都是不可变的（内容列表不可修改）。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public final class MessageFactory {
 

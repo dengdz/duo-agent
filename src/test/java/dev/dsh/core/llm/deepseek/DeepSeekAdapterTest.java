@@ -5,7 +5,17 @@ import dev.dsh.api.llm.StreamCallback;
 import dev.dsh.core.llm.SystemPromptImpl;
 import dev.dsh.core.llm.ToolRegistryImpl;
 import dev.dsh.core.llm.tools.TodoWriteTool;
-import dev.dsh.model.llm.*;
+import dev.dsh.model.llm.ContentBlock;
+import dev.dsh.model.llm.FinishReason;
+import dev.dsh.model.llm.GenerateOptions;
+import dev.dsh.model.llm.Message;
+import dev.dsh.model.llm.MessageFactory;
+import dev.dsh.model.llm.MessageSource;
+import dev.dsh.model.llm.StreamChunk;
+import dev.dsh.model.llm.ToolProviderResult;
+import dev.dsh.model.llm.ToolSchema;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
@@ -13,19 +23,24 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * DeepSeek 适配器真实 API 测试。
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 class DeepSeekAdapterTest {
 
     private static final String MODEL = "deepseek-v4-flash";
 
     @Test
+    @Tag("integration")
     @EnabledIfEnvironmentVariable(named = "DEEPSEEK_API_KEY", matches = ".+")
-    void 真实对话测试() throws Exception {
+    void testStream_whenRealApiCalled_thenReturnsTextReply() throws Exception {
         var llm = new LlmRuntime();
         llm.registerAdapter("deepseek-official", new DeepSeekAdapter());
 
@@ -95,8 +110,9 @@ class DeepSeekAdapterTest {
     }
 
     @Test
+    @Tag("integration")
     @EnabledIfEnvironmentVariable(named = "DEEPSEEK_API_KEY", matches = ".+")
-    void 使用AgentLoop完成对话() throws Exception {
+    void testAgentLoop_whenRealApiCalled_thenCompletesTurn() throws Exception {
         var llm = new LlmRuntime();
         llm.registerAdapter("deepseek-official", new DeepSeekAdapter());
 
@@ -140,15 +156,13 @@ class DeepSeekAdapterTest {
 
         // 验证最后一条消息是 assistant
         var lastMsg = messages.getLast();
-        assertEquals("assistant", lastMsg.role(), "最后一条消息应是 assistant 角色");
+        assertEquals(Message.ROLE_ASSISTANT, lastMsg.role(), "最后一条消息应是 assistant 角色");
     }
 
     @Test
-    void 无APIKey时优雅失败() {
+    void testStream_whenNoApiKey_thenReportsError() throws Exception {
         var apiKey = System.getenv("DEEPSEEK_API_KEY");
-        if (apiKey != null && !apiKey.isBlank()) {
-            return;
-        }
+        Assumptions.assumeTrue(apiKey == null || apiKey.isBlank(), "已设置 API key，本用例仅验证无 key 场景");
 
         var adapter = new DeepSeekAdapter();
         var options = new GenerateOptions("deepseek-official", MODEL, List.of());
@@ -170,8 +184,9 @@ class DeepSeekAdapterTest {
 
         try {
             barrier.get(5, TimeUnit.SECONDS);
-        } catch (Exception e) {
-            // timeout is ok
+        } catch (TimeoutException e) {
+            // 无 key 时应立即回调错误，不应等到超时
+            fail("应即时返回错误而非超时");
         }
 
         assertNotNull(errorRef.get(), "应返回错误");
@@ -179,8 +194,9 @@ class DeepSeekAdapterTest {
     }
 
     @Test
+    @Tag("integration")
     @EnabledIfEnvironmentVariable(named = "DEEPSEEK_API_KEY", matches = ".+")
-    void 工具调用往返测试() throws Exception {
+    void testToolRoundTrip_whenRealApiCalled_thenWritesTodos() throws Exception {
         var llm = new LlmRuntime();
         llm.registerAdapter("deepseek-official", new DeepSeekAdapter());
 
@@ -246,7 +262,7 @@ class DeepSeekAdapterTest {
     }
 
     @Test
-    void 工具调用解析_无需真实API() {
+    void testParseChunk_whenToolCallDeltas_thenAssemblesToolCall() {
         var adapter = new DeepSeekAdapter();
         var textBuf = new StringBuilder();
         var chunks = new ArrayList<StreamChunk>();
@@ -314,7 +330,7 @@ class DeepSeekAdapterTest {
     }
 
     @Test
-    void 普通文本解析_无需真实API() {
+    void testParseChunk_whenTextDeltas_thenAssemblesText() {
         var adapter = new DeepSeekAdapter();
         var textBuf = new StringBuilder();
         var chunks = new ArrayList<StreamChunk>();

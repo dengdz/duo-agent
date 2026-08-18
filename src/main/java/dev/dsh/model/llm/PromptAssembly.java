@@ -8,6 +8,9 @@ import java.util.Map;
  * <p>
  * 对应 TS 源码中的 {@code PromptAssembly}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public record PromptAssembly(
         List<AssembledSection> sections,
@@ -16,9 +19,17 @@ public record PromptAssembly(
         Map<String, String> variables
 ) {
     public PromptAssembly {
-        if (sections == null) sections = List.of();
-        if (contexts == null) contexts = List.of();
-        if (tools == null) tools = List.of();
-        if (variables == null) variables = Map.of();
+        if (sections == null) {
+            sections = List.of();
+        }
+        if (contexts == null) {
+            contexts = List.of();
+        }
+        if (tools == null) {
+            tools = List.of();
+        }
+        if (variables == null) {
+            variables = Map.of();
+        }
     }
 }

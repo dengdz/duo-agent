@@ -1,6 +1,5 @@
-package dev.dsh.core.agent;
+package dev.dsh.api.agent;
 
-import dev.dsh.api.agent.InboxTarget;
 import dev.dsh.model.llm.Message;
 import dev.dsh.util.MessageId;
 
@@ -20,6 +19,9 @@ import java.util.Map;
  * <p>
  * 对应 TS 源码中的 {@code Inbox} 类。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public class Inbox {
 
@@ -99,7 +101,9 @@ public class Inbox {
      */
     public boolean replace(MessageId messageId, Message newMessage) {
         var location = locate(messageId);
-        if (location == null) return false;
+        if (location == null) {
+            return false;
+        }
         state.get(location.target).set(location.index, newMessage);
         return true;
     }
@@ -111,7 +115,9 @@ public class Inbox {
      */
     public boolean remove(MessageId messageId) {
         var location = locate(messageId);
-        if (location == null) return false;
+        if (location == null) {
+            return false;
+        }
         state.get(location.target).remove(location.index);
         return true;
     }

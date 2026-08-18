@@ -17,6 +17,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>
  * 覆盖：文本流、工具调用流、用量、结束原因、max-tokens 截断。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 class BlockAssemblerTest {
 

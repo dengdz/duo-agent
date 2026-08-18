@@ -12,6 +12,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * 对应 TS 源码中的 {@code LlmRuntime}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public class LlmRuntime {
 

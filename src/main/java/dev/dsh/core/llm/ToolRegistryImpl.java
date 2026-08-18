@@ -7,10 +7,12 @@ import dev.dsh.model.llm.ToolExecutionResult;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * ToolRegistry 的默认实现。
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public class ToolRegistryImpl implements ToolRegistry {
 

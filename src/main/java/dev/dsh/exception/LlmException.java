@@ -2,6 +2,9 @@ package dev.dsh.exception;
 
 /**
  * LLM 调用失败时抛出的异常。
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public class LlmException extends RuntimeException {
 

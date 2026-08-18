@@ -1,6 +1,5 @@
 package dev.dsh.api.agent;
 
-import dev.dsh.core.agent.Inbox;
 import dev.dsh.model.llm.Message;
 import dev.dsh.core.session.Session;
 import dev.dsh.model.session.SessionId;
@@ -10,6 +9,9 @@ import dev.dsh.model.session.SessionId;
  * <p>
  * 对应 TS 源码中的 {@code Agent} 接口。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public interface Agent {
 

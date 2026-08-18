@@ -5,6 +5,9 @@ package dev.dsh.model.llm;
  * <p>
  * 对应 TS 源码中的 {@code FinishReasonMap}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public sealed interface FinishReason {
 

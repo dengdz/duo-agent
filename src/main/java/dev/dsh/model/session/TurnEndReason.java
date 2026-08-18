@@ -7,6 +7,9 @@ import dev.dsh.model.llm.LlmFailure;
  * <p>
  * 对应 TS 源码中的 {@code TurnEndReasonMap}。
  * </p>
+ *
+ * @author zhangyl
+ * @date 2026-08-18
  */
 public sealed interface TurnEndReason {
 
