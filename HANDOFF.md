@@ -2,7 +2,7 @@
 
 ## 项目状态
 
-Java 21 + Maven 多模块项目，位于 `/Users/zhangyl/IdeaProjects/mp-agent`。已完成 deepseek-harness 核心管线的移植，**67 个测试，0 失败**（3 个真实 API 测试因缺少 `DEEPSEEK_API_KEY` 被跳过）。
+Java 21 + Maven 多模块项目，位于 `/Users/zhangyl/IdeaProjects/mp-agent`。已完成 deepseek-harness 核心管线的移植，**76 个测试，0 失败**（3 个真实 API 测试因缺少 `DEEPSEEK_API_KEY` 被跳过）。
 
 ## 已完成模块
 
@@ -67,15 +67,40 @@ util/    ← 通用工具
 - ReactLoopAgent 跳过 `agent/pre-step/request/turn-stopping` 拦截器
 - 系统测试使用 `@EnabledIfEnvironmentVariable(named = "DEEPSEEK_API_KEY", ...)` 门禁
 
+## 阿里巴巴 Java 规范 Review
+
+已做一次全量 review，高危/常见违规项已修复，其余作为建议记录：
+
+### 已修复
+- 移除所有 `java.util.*` 与 `dev.dsh.*` 通配 import，改为显式导入。
+- `SessionStore.counter` 改为 `AtomicInteger`，修复并发创建会话 ID 的竞态条件。
+- `BashTool` 使用 try-with-resources 关闭 `Process` 输入流；修正字节/字符截断判断。
+- `BashTool`/`FileReadTool`/`FileWriteTool` 抽取工具参数 key 为常量。
+- `DeepSeekAdapter` 用 `Collectors.joining()` 替代流内字符串拼接；修复 `forEach` 块缩进。
+- `DeepSeekAdapter.extractJsonObject` 支持跳过字符串内的 `{`/`}`，避免 JSON 字符串值误匹配。
+- `ReactLoopAgent` 移除冗余同包导入；`turn()` 内使用本地 `step` 避免重复读取 volatile `phase`。
+- 修复多个源文件与测试文件中超长行（>120 字符）。
+
+### 仍建议
+- `ReactLoopAgent.cancel()` 目前只在 turn 边界生效，不会中断正在运行的 LLM 调用；如需即时取消，应保存 `CompletableFuture` 并调用取消/中断。
+- `DeepSeekAdapter.extractJsonString` 仍是简单字符扫描，未处理字段名出现在 JSON 字符串值内的情况；当前 DeepSeek 响应结构可用，但建议后续替换为正规 JSON 库或增强扫描。
+- 部分边界处直接 `catch (Exception e)` 后包成业务结果，符合工具执行边界场景，但内部异常建议保留栈跟踪日志。
+- 测试方法名使用中文在阿里巴巴规范中无明确禁止，但建议后续新测试使用英文方法名 + `@DisplayName`。
+
 ## Git 历史
 
 ```
+e397682 style(alibaba): 按阿里巴巴 Java 开发规范 review 并修复高危/常见违规项
+28a4be1 docs: HANDOFF.md 记录工具参数解析修复
+9cc9571 fix(tools): 修复工具参数解析——嵌套 JSON 被当成字符串导致工具执行失败
+9d6477f docs: 更新 HANDOFF.md 状态与测试统计
+2500c67 feat(tools): 添加 bash、file_read、file_write 工具
+8aa69f9 fix(deepseek): 修复并验证工具调用解析
 89352db feat(system-prompt)
 7a2ffab feat(tools) + 工具执行集成
 28d205a SystemPrompt 集成到 ReactLoopAgent
 b515020 feat(deepseek): 真实 DeepSeek API 适配器
 5edf04b refactor: 分层重构 model/api/core
-1495755 refactor: 阿里巴巴规范修复
 34275d1 feat(agent-loop)
 990cabf feat(agent)
 304d1d5 feat(session)
