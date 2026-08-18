@@ -6,6 +6,7 @@ import dev.dsh.model.llm.MessageFactory;
 import dev.dsh.model.llm.MessageSource;
 import dev.dsh.api.llm.LlmRuntime;
 import dev.dsh.core.llm.MockEchoAdapter;
+import dev.dsh.core.llm.SystemPromptImpl;
 import dev.dsh.model.llm.ContentBlock;
 import dev.dsh.core.session.Session;
 import dev.dsh.model.session.SessionEvent;
@@ -45,7 +46,8 @@ class ReactLoopAgentTest {
                 new SessionId("test-agent"),
                 new AgentOptions("mock-echo", "mock-model", null),
                 session,
-                llm
+                llm,
+                new SystemPromptImpl("", false)
         );
 
         // 发送一条消息
@@ -117,7 +119,8 @@ class ReactLoopAgentTest {
                 new SessionId("multi-agent"),
                 new AgentOptions("mock-echo", "mock-model", null),
                 session,
-                llm
+                llm,
+                new SystemPromptImpl("", false)
         );
 
         // 第一轮

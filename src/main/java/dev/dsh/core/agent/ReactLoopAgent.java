@@ -3,12 +3,13 @@ package dev.dsh.core.agent;
 import dev.dsh.api.agent.*;
 import dev.dsh.core.agent.Inbox;
 import dev.dsh.exception.AgentLoopException;
-import dev.dsh.exception.LlmException;
 import dev.dsh.core.llm.BlockAssembler;
+import dev.dsh.core.llm.SystemPromptImpl;
 import dev.dsh.model.llm.Message;
 import dev.dsh.model.llm.MessageFactory;
 import dev.dsh.api.llm.LlmRuntime;
 import dev.dsh.api.llm.StreamCallback;
+import dev.dsh.api.llm.SystemPrompt;
 import dev.dsh.model.llm.*;
 import dev.dsh.core.session.Session;
 import dev.dsh.model.session.*;
@@ -18,10 +19,10 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * 简化版 Agent 驱动循环。
+ * Agent 驱动循环。
  * <p>
- * 实现核心 turn/step 状态机、session 日志、inbox 消息流转和 LLM 调用。
- * 简化版跳过：agent/pre-step/request/turn-stopping 等拦截器、工具执行、system-prompt 组装。
+ * 实现核心 turn/step 状态机、session 日志、inbox 消息流转、LLM 调用和 system-prompt 组装。
+ * 简化版跳过：agent/pre-step/request/turn-stopping 等拦截器、工具执行。
  * </p>
  */
 public class ReactLoopAgent implements Agent {
@@ -45,6 +46,7 @@ public class ReactLoopAgent implements Agent {
     private final Session session;
     private final Inbox inbox = new Inbox();
     private final LlmRuntime llmRuntime;
+    private final SystemPrompt systemPrompt;
 
     private volatile Phase phase;
     private volatile CompletableFuture<Void> activity = CompletableFuture.completedFuture(null);
@@ -52,11 +54,13 @@ public class ReactLoopAgent implements Agent {
 
     // ---- 构造 ----
 
-    public ReactLoopAgent(SessionId id, AgentOptions options, Session session, LlmRuntime llmRuntime) {
+    public ReactLoopAgent(SessionId id, AgentOptions options, Session session,
+                          LlmRuntime llmRuntime, SystemPrompt systemPrompt) {
         this.id = id;
         this.options = options;
         this.session = session;
         this.llmRuntime = llmRuntime;
+        this.systemPrompt = systemPrompt;
         // 从 session 日志恢复最后 turn 号
         int lastTurn = 0;
         for (var e : session.events()) {
@@ -194,7 +198,14 @@ public class ReactLoopAgent implements Agent {
         var provider = options.provider() != null ? options.provider() : "mock-echo";
         var model = options.model() != null ? options.model() : "mock-model";
         var messages = session.deriveMessages();
-        var request = new GenerateOptions(provider, model, messages);
+
+        // 组装 system prompt
+        var assembly = systemPrompt.assemble();
+        var system = SystemPromptImpl.renderPrompt(assembly);
+        var tools = assembly.tools().isEmpty() ? null : assembly.tools();
+
+        var request = new GenerateOptions(provider, model, messages, system, tools,
+                null, null, null, null);
 
         var assembler = new BlockAssembler();
         var chunkSeqs = new ArrayList<Integer>();

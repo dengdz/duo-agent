@@ -2,6 +2,7 @@ package dev.dsh.core.llm.deepseek;
 
 import dev.dsh.api.llm.LlmRuntime;
 import dev.dsh.api.llm.StreamCallback;
+import dev.dsh.core.llm.SystemPromptImpl;
 import dev.dsh.model.llm.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -102,7 +103,8 @@ class DeepSeekAdapterTest {
                 new dev.dsh.model.session.SessionId("deepseek-agent"),
                 new dev.dsh.api.agent.AgentOptions("deepseek-official", MODEL, null),
                 session,
-                llm
+                llm,
+                new SystemPromptImpl("", false)
         );
 
         var userMsg = MessageFactory.createUserMessage(
