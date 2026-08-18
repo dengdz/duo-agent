@@ -1,8 +1,112 @@
-# Handoff: mp-agent (Java port of DeepSeek Harness)
+# Handoff: duo-agent (Java port of DeepSeek Harness)
+
+## 最新交接（2026-08-18）
+
+### 当前目标与已完成工作
+
+本项目已从 `mp-agent` 重命名为 `duo-agent`：
+
+- 项目目录：`/Users/zhangyl/IdeaProjects/duo-agent`
+- Maven `artifactId` 与 `name`：`duo-agent`
+- 系统身份提示词已改为 `You are an AI agent powered by duo-agent.`
+- 本文档和 `COMPARISON.md` 中的项目名、项目路径已同步
+- IntelliJ IDEA 的模块名和 Maven 运行配置已同步为 `duo-agent`
+- Java 包名 `dev.dsh` 保持不变，这是代码命名空间，不属于项目目录名改名范围
+
+三个内置工具的测试已增加实际结果输出，但生产代码未改动：
+
+- `BashToolTest`：打印命令输出、工作目录结果、非零退出码和缺少参数提示
+- `FileToolTest`：打印写入、读取、文件不存在和覆盖后的结果
+- `TodoWriteToolTest`：打印正常写入、任务列表替换、非法状态跳过和缺少参数结果
+
+重命名前已执行：
+
+```text
+mvn -q -Dtest=BashToolTest,FileToolTest,TodoWriteToolTest test
+Tests run: 12, Failures: 0, Errors: 0, Skipped: 0
+```
+
+### 当前验证阻塞
+
+重命名后，当前代理会话的 shell 仍绑定旧工作目录 `/Users/zhangyl/IdeaProjects/mp-agent`。旧目录被移动后，工具运行器执行命令时返回：
+
+```text
+spawn /bin/zsh ENOENT
+```
+
+因此重命名后的 `mvn test` 尚未在本会话中重新执行。代码和配置已通过新路径读取确认，但下一位代理必须在新终端或恢复工作目录后重新验证：
+
+```bash
+cd /Users/zhangyl/IdeaProjects/duo-agent
+mvn -q test
+```
+
+同时检查旧名称残留：
+
+```bash
+rg -n --hidden --glob '!.git/**' --glob '!target/**' --glob '!.workbuddy/**' \\
+  'mp-agent|mp_agent|MP Agent|mp agent' .
+```
+
+预期无输出。
+
+### Git 状态与待提交内容
+
+用户已明确要求提交 Git，但提交尚未完成；交接时不要假设已有新提交。已知本轮相关修改包括：
+
+- `pom.xml`
+- `src/main/java/dev/dsh/core/llm/SystemPromptImpl.java`
+- `src/test/java/dev/dsh/core/llm/tools/BashToolTest.java`
+- `src/test/java/dev/dsh/core/llm/tools/FileToolTest.java`
+- `src/test/java/dev/dsh/core/llm/tools/TodoWriteToolTest.java`
+- `HANDOFF.md`
+- `COMPARISON.md`（此前为未跟踪文件）
+- `.idea/workspace.xml`
+- `.idea/compiler.xml`
+- `.workbuddy/memory/2026-08-18.md`（已有本轮之前的本地修改，提交前需单独确认是否纳入）
+
+提交前应在新目录执行：
+
+```bash
+git status --short --branch
+git diff --stat
+git diff --cached --stat
+```
+
+建议提交项目改名、工具测试输出和相关文档；不要未经确认把 `.workbuddy/memory/2026-08-18.md` 一并提交。`COMPARISON.md` 是否纳入提交也应根据其是否属于本次交付范围决定。
+
+建议提交信息：
+
+```text
+chore(project): 将项目重命名为 duo-agent
+```
+
+如果同时提交工具测试输出，建议使用能覆盖两类变更的说明，例如：
+
+```text
+chore(project): 重命名项目并增强工具测试输出
+```
+
+### 建议下一步
+
+1. 在新终端打开 `/Users/zhangyl/IdeaProjects/duo-agent`。
+2. 执行 `mvn -q test`，确认重命名未影响构建。
+3. 检查旧名称残留和 Git 工作区。
+4. 仅暂存本次项目改名、测试日志及明确纳入范围的文档。
+5. 提交后再继续 Workspace 设计，随后实现 Workspace 作用域的 SessionStore 和 JSONL 持久化。
+
+### 建议技能
+
+- `git-commit-gen`：分析本轮差异、整理暂存区并生成 Conventional Commit
+- `handoff`：下一次上下文不足时更新本交接稿
+- `grill-with-docs`：在实现 Workspace 前明确 root、cwd、状态目录、生命周期和并发边界
+- `mermaid-diagram`：绘制 Workspace、SessionStore、AgentRegistry 和 ToolRuntime 的关系图
+
+---
 
 ## 项目状态
 
-Java 21 + Maven 多模块项目，位于 `/Users/zhangyl/IdeaProjects/mp-agent`。已完成 deepseek-harness 核心管线的移植，**76 个测试，0 失败**（3 个真实 API 测试因缺少 `DEEPSEEK_API_KEY` 被跳过）。
+Java 21 + Maven 多模块项目，位于 `/Users/zhangyl/IdeaProjects/duo-agent`。已完成 deepseek-harness 核心管线的移植，**76 个测试，0 失败**（3 个真实 API 测试因缺少 `DEEPSEEK_API_KEY` 被跳过）。
 
 ## 已完成模块
 
