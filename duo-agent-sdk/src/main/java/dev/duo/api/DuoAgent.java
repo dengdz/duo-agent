@@ -2,6 +2,8 @@ package dev.duo.api;
 
 import dev.duo.api.agent.Agent;
 import dev.duo.core.session.Session;
+import dev.duo.model.session.SessionEvent;
+import dev.duo.model.session.TurnEndReason;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Flow;
@@ -148,6 +150,80 @@ public interface DuoAgent {
      * @throws IllegalArgumentException 如果 message 为空
      */
     Flow.Publisher<String> stream(String message);
+
+    /**
+     * 多事件流对话 - 返回完整 Session 事件日志的响应式流。
+     * <p>
+     * 与 {@link #stream(String)}（仅推送文本增量）不同，本方法<b>全量透传</b>
+     * session 事件（{@link SessionEvent}，15 种类型）——订阅者可完整观察
+     * Agent 的工作过程：思考推理（ReasoningDelta）、工具调用与结果、
+     * step 边界、turn 结束原因等，适合渲染类似 IDE Agent 的工作过程界面。
+     * 事件信封原样透传（含 {@code seq} 单调递增序号，未来断线重连的基础）。
+     * </p>
+     * <p>
+     * <b>单 turn 事件时序：</b>
+     * <pre>{@code
+     * turn/start
+     * └─ step/start
+     *    user/message                       （本 step 进入的输入）
+     *    assistant/chunk × N                （流式增量：文本/思考/工具参数）
+     *    assistant/message                  （组装完成的完整消息，usage 随行，
+     *                                        sourceEventSeqs 回链 chunk seq）
+     *    (tool/call → tool/result) × K      （逐对交错：先发某工具的 call，
+     *                                        执行完毕紧随其 result，再进入下一个工具）
+     * └─ step/end                           （finally 必发）
+     * turn/end                              （finally 必发，携带结束原因）
+     * }</pre>
+     * </p>
+     * <p>
+     * <b>完成信号：</b>{@code turn/end} 事件即整个对话轮的权威结束信号，
+     * {@link TurnEndReason} 区分 6 种结束原因（completed / aborted / blocked /
+     * error / max-tokens / interrupted）。
+     * </p>
+     * <p>
+     * <b>示例：</b>
+     * <pre>{@code
+     * agent.chatEvents("分析当前目录的代码").subscribe(new Flow.Subscriber<>() {
+     *     private Flow.Subscription subscription;
+     *     public void onSubscribe(Flow.Subscription s) {
+     *         subscription = s;
+     *         s.request(Long.MAX_VALUE);
+     *     }
+     *     public void onNext(SessionEvent event) {
+     *         switch (event) {
+     *             case SessionEventAssistantChunk c when c.chunk() instanceof StreamChunk.ReasoningDelta r
+     *                     -> showThinking(r.text());          // 思考过程
+     *             case SessionEventAssistantChunk c when c.chunk() instanceof StreamChunk.TextDelta t
+     *                     -> showAnswer(t.text());            // 回答文本
+     *             case SessionEventToolCall call -> showTool(call.name(), call.arguments());
+     *             case SessionEventToolResult result -> showResult(result.message());
+     *             case SessionEventTurnEnd end -> finish(end.reason());
+     *             default -> { /* 其余类型按需处理 *&#47; }
+     *         }
+     *     }
+     *     public void onError(Throwable t) { ... }
+     *     public void onComplete() { ... }
+     * });
+     * }</pre>
+     * </p>
+     * <p>
+     * <b>行为说明：</b>与 {@link #stream(String)} 一致——冷发布者（订阅时才发起对话）、
+     * 背压（{@code request(n)}）、取消（停止推送但对话轮继续执行完毕）、单订阅
+     * （重复订阅收到 onError）。事件不做服务端过滤，订阅者按需 {@code instanceof}
+     * 模式匹配自行取用。<b>慢消费者保护：</b>订阅者不及时 {@code request} 时事件在
+     * 内部缓冲（上限 8192 个，推理模型的超长思考痕迹可能触达），溢出即以
+     * {@code onError} 终止订阅。
+     * todo/write、request/header、request/context 三类事件
+     * 当前主流程尚无产生点，出现时按需处理即可。
+     * </p>
+     *
+     * @param message 用户消息
+     * @return Session 事件流（冷发布者，订阅时才发起对话）
+     * @throws IllegalArgumentException 如果 message 为空
+     * @see SessionEvent
+     * @see TurnEndReason
+     */
+    Flow.Publisher<SessionEvent> chatEvents(String message);
 
     /**
      * 获取底层 Agent 实例（高级用户）。

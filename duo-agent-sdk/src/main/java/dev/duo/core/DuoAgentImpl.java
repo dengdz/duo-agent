@@ -19,7 +19,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * DuoAgent 接口的默认实现。
@@ -101,27 +101,47 @@ public final class DuoAgentImpl implements DuoAgent {
         if (message == null || message.isBlank()) {
             throw new IllegalArgumentException("消息内容不能为空");
         }
-        return new ChatStreamPublisher(message);
+        // 仅投影文本增量：ReasoningDelta 是思考过程、ToolCallDelta 是 JSON 参数碎片（见 chatEvents）
+        return new ChatStreamPublisher<>(message, event -> {
+            if (event instanceof SessionEventAssistantChunk chunkEvent
+                    && chunkEvent.chunk() instanceof StreamChunk.TextDelta delta) {
+                return delta.text();
+            }
+            return null;
+        });
+    }
+
+    @Override
+    public Flow.Publisher<SessionEvent> chatEvents(String message) {
+        if (message == null || message.isBlank()) {
+            throw new IllegalArgumentException("消息内容不能为空");
+        }
+        // 恒等透传：session 事件全量推送给订阅者（对应 DSH 的 session/event 订阅模式）
+        return new ChatStreamPublisher<>(message, event -> event);
     }
 
     /**
      * 冷发布者：subscribe 时才在虚拟线程上驱动 {@link #chat(String)}，
-     * 流式真源是 session 事件广播（对应 DSH 的 session/event 订阅模式）——
-     * adapter 的每个 TextDelta 已由 ReactLoopAgent 逐 chunk 写入 session，
-     * 这里订阅广播并过滤出文本增量（ReasoningDelta 是思考过程噪音、
-     * ToolCallDelta 是 JSON 参数碎片，均不推送）。
+     * 流式真源是 session 事件广播——adapter 的每个增量已由 ReactLoopAgent
+     * 逐 chunk 写入 session，这里订阅广播并经投影器转换：
+     * {@link #stream(String)} 只取文本增量，{@link #chatEvents(String)} 全量透传。
+     *
+     * @param <T> 推送给订阅者的元素类型（String 或 SessionEvent）
      */
-    private final class ChatStreamPublisher implements Flow.Publisher<String> {
+    private final class ChatStreamPublisher<T> implements Flow.Publisher<T> {
 
         private final String message;
+        /** 事件投影器：返回 null 表示该事件不推送给订阅者。 */
+        private final Function<SessionEvent, T> projector;
         private final AtomicBoolean subscribedOnce = new AtomicBoolean();
 
-        ChatStreamPublisher(String message) {
+        ChatStreamPublisher(String message, Function<SessionEvent, T> projector) {
             this.message = message;
+            this.projector = projector;
         }
 
         @Override
-        public void subscribe(Flow.Subscriber<? super String> subscriber) {
+        public void subscribe(Flow.Subscriber<? super T> subscriber) {
             Objects.requireNonNull(subscriber, "subscriber 不能为 null");
             // 单订阅：重复订阅无法共享同一次对话轮
             if (!subscribedOnce.compareAndSet(false, true)) {
@@ -137,7 +157,7 @@ public final class DuoAgentImpl implements DuoAgent {
                     }
                 });
                 subscriber.onError(new IllegalStateException(
-                        "stream() 返回的 Publisher 仅支持订阅一次，请重新调用 stream(message)"));
+                        "stream()/chatEvents() 返回的 Publisher 仅支持订阅一次，请重新调用"));
                 return;
             }
             new ChatStreamSubscription(subscriber).start();
@@ -149,15 +169,22 @@ public final class DuoAgentImpl implements DuoAgent {
             /** 完成哨兵（正常终态）。 */
             private static final Object TERMINAL = new Object();
 
-            private final Flow.Subscriber<? super String> subscriber;
-            /** 元素为 String（文本增量）、TERMINAL（完成）或 StreamError（失败）。 */
-            private final BlockingQueue<Object> buffer = new LinkedBlockingQueue<>();
+            /**
+             * 内部缓冲上限：订阅者不消费（不 request）时，最多缓存这么多事件，
+             * 溢出即以 onError 终止订阅——防止 chatEvents() 全事件透传下
+             * （推理模型思考痕迹可达数千 chunk）慢消费者导致整轮事件驻留内存。
+             */
+            private static final int MAX_BUFFERED_ITEMS = 8192;
+
+            private final Flow.Subscriber<? super T> subscriber;
+            /** 元素为投影结果（T）、TERMINAL（完成）或 StreamError（失败）；有界，防慢消费者内存放大。 */
+            private final BlockingQueue<Object> buffer = new LinkedBlockingQueue<>(MAX_BUFFERED_ITEMS);
             private final AtomicLong demand = new AtomicLong();
             private final AtomicBoolean cancelled = new AtomicBoolean();
             /** 终态（onComplete/onError）是否已发出，保证恰好一次。 */
             private volatile boolean terminated;
 
-            ChatStreamSubscription(Flow.Subscriber<? super String> subscriber) {
+            ChatStreamSubscription(Flow.Subscriber<? super T> subscriber) {
                 this.subscriber = subscriber;
             }
 
@@ -166,9 +193,9 @@ public final class DuoAgentImpl implements DuoAgent {
                 // 虚拟线程驱动对话轮（与 ReactLoopAgent 内部驱动方式一致）
                 Thread.ofVirtual().name("duo-chat-stream").start(() -> {
                     AutoCloseable unsubscriber = session.onAppend(event -> {
-                        if (event instanceof SessionEventAssistantChunk chunkEvent
-                                && chunkEvent.chunk() instanceof StreamChunk.TextDelta delta) {
-                            emit(delta.text());
+                        var item = projector.apply(event);
+                        if (item != null) {
+                            emit(item);
                         }
                     });
                     try {
@@ -190,7 +217,20 @@ public final class DuoAgentImpl implements DuoAgent {
                 if (cancelled.get()) {
                     return;
                 }
-                buffer.add(item);
+                // 慢消费者缓冲溢出：终止订阅（对话轮继续执行完毕，仅停止推送）
+                if (!buffer.offer(item)) {
+                    cancelled.set(true);
+                    synchronized (this) {
+                        if (!terminated) {
+                            terminated = true;
+                            subscriber.onError(new IllegalStateException(
+                                    "订阅者消费过慢：内部缓冲达到上限 " + MAX_BUFFERED_ITEMS
+                                            + " 个事件，订阅已终止（请增大 request 批量或及时消费）"));
+                        }
+                        buffer.clear();
+                    }
+                    return;
+                }
                 drain();
             }
 
@@ -217,7 +257,9 @@ public final class DuoAgentImpl implements DuoAgent {
                             return;
                         }
                         demand.decrementAndGet();
-                        subscriber.onNext((String) item);
+                        @SuppressWarnings("unchecked")
+                        T typedItem = (T) item;
+                        subscriber.onNext(typedItem);
                     }
                 }
             }

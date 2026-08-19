@@ -46,6 +46,7 @@ import dev.duo.model.session.TurnEndReason;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -324,7 +325,7 @@ public class ReactLoopAgent implements Agent {
         var model = options.model() != null ? options.model() : DEFAULT_MODEL;
         var requestCtx = new RequestHook.RequestContext(id, turn, step);
 
-        BlockAssembler assembler;
+        StreamResult streamResult;
         int attempt = 0;
         while (true) {
             GenerateOptions request;
@@ -335,7 +336,7 @@ public class ReactLoopAgent implements Agent {
             }
 
             try {
-                assembler = streamOnce(turn, step, request);
+                streamResult = streamOnce(turn, step, request);
                 break;
             } catch (StepLlmException e) {
                 var action = dispatchRequestError(turn, step, e.failure());
@@ -352,7 +353,8 @@ public class ReactLoopAgent implements Agent {
             }
         }
 
-        return finalizeStep(turn, step, provider, model, assembler);
+        return finalizeStep(turn, step, provider, model,
+                streamResult.assembler(), streamResult.chunkSeqs());
     }
 
     /** 内置 request 行为：从 session 日志派生消息并组装默认请求。 */
@@ -392,8 +394,12 @@ public class ReactLoopAgent implements Agent {
         }
     }
 
+    /** 一次成功流式调用的产物：组装器 + 构成本次消息的全部 chunk 事件 seq（供回链）。 */
+    private record StreamResult(BlockAssembler assembler, List<Integer> chunkSeqs) {
+    }
+
     /** 执行一次流式调用并组装块；失败以 StepLlmException 携带结构化故障抛出。 */
-    private BlockAssembler streamOnce(int turn, int step, GenerateOptions request)
+    private StreamResult streamOnce(int turn, int step, GenerateOptions request)
             throws StepLlmException {
         var assembler = new BlockAssembler();
         var barrier = new CompletableFuture<Void>();
@@ -401,6 +407,8 @@ public class ReactLoopAgent implements Agent {
         // 超时/失败后关闭回调入口：迟到的 chunk 不得再写入 session，
         // 否则重试场景下两个 attempt 的 chunk 会混入同一 turn/step 日志
         var closed = new AtomicBoolean();
+        // 收集本 attempt 的 chunk seq：assistant/message 通过 sourceEventSeqs 回链它们
+        var chunkSeqs = new ArrayList<Integer>();
 
         llmRuntime.stream(request, new StreamCallback() {
             @Override
@@ -410,6 +418,7 @@ public class ReactLoopAgent implements Agent {
                 }
                 int seq = session.seq();
                 session.append(new SessionEventAssistantChunk(seq, turn, step, chunk));
+                chunkSeqs.add(seq);
                 assembler.push(chunk);
             }
             @Override
@@ -451,16 +460,19 @@ public class ReactLoopAgent implements Agent {
         if (finish instanceof FinishReason.Error) {
             throw new StepLlmException(new LlmFailure("LLM 异常结束", "STREAM_ERROR"));
         }
-        return assembler;
+        return new StreamResult(assembler, chunkSeqs);
     }
 
     /** 写入 assistant 消息、判定结束原因并执行工具调用。 */
     private TurnEndReason finalizeStep(int turn, int step, String provider, String model,
-                                       BlockAssembler assembler) throws AgentLoopException {
+                                       BlockAssembler assembler, List<Integer> chunkSeqs)
+            throws AgentLoopException {
         var assistantMsg = MessageFactory.createAssistantMessage(assembler.blocks(), provider, model);
+        // sourceEventSeqs 回链：完整消息可追溯到拼出它的全部 chunk 事件（token 级回放保真）
+        var sourceSeqs = chunkSeqs.stream().mapToInt(Integer::intValue).toArray();
         session.append(new SessionEventAssistantMessage(
                 session.seq(), turn, step, assistantMsg,
-                new SurfaceOp.Append(), assembler.usage().orElse(null)
+                new SurfaceOp.Append(), sourceSeqs, assembler.usage().orElse(null)
         ));
 
         if (assembler.finish() instanceof FinishReason.MaxTokens) {

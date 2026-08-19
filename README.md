@@ -7,7 +7,7 @@
 - 🚀 **极简 API** - Builder 模式，开箱即用
 - 🔧 **内置工具链** - bash、文件操作、代码编辑、搜索等
 - 🔌 **零依赖** - 纯 Java 21，无第三方依赖
-- 🧪 **高质量** - 224 个单元测试，100% 工具链稳定性
+- 🧪 **高质量** - 232 个单元测试，100% 工具链稳定性
 - 🎯 **ReAct 架构** - 成熟的推理-行动循环模式
 - 🧠 **推理模式** - 支持 DeepSeek-R1 等深度推理模型
 
@@ -164,6 +164,75 @@ Flowable<String> flowable = Flowable.fromPublisher(agent.stream(...)); // RxJava
 - **取消** — `cancel()` 停止推送并释放资源，但底层对话轮继续执行完毕
 - **单订阅** — 每次调用返回的 Publisher 仅支持订阅一次
 
+### 多事件流（完整工作过程）
+
+`chatEvents()` 全量透传 session 事件（15 种类型），完整观察 Agent 的工作过程：
+思考推理、文本增量、工具调用与结果、step 边界、turn 结束原因——
+适合渲染 IDE Agent 式的工作过程界面。事件信封含 `seq` 单调序号（未来断线重连的基础）。
+
+```java
+agent.chatEvents("分析当前目录的代码").subscribe(new Flow.Subscriber<>() {
+    private Flow.Subscription subscription;
+
+    @Override
+    public void onSubscribe(Flow.Subscription s) {
+        subscription = s;
+        s.request(Long.MAX_VALUE);
+    }
+
+    @Override
+    public void onNext(SessionEvent event) {
+        switch (event) {
+            case SessionEventAssistantChunk c when c.chunk() instanceof StreamChunk.ReasoningDelta r
+                    -> showThinking(r.text());   // 思考过程（stream() 中被过滤，这里可见）
+            case SessionEventAssistantChunk c when c.chunk() instanceof StreamChunk.TextDelta t
+                    -> showAnswer(t.text());     // 回答文本
+            case SessionEventToolCall call
+                    -> showTool(call.name(), call.arguments());       // 工具调用
+            case SessionEventToolResult result
+                    -> showResult(result.message());                   // 工具结果
+            case SessionEventTurnEnd end
+                    -> finish(end.reason());          // turn 结束（完成信号，6 种原因）
+            default -> { /* 其余类型按需处理 */ }
+        }
+    }
+
+    @Override
+    public void onError(Throwable t) { /* ... */ }
+
+    @Override
+    public void onComplete() { /* ... */ }
+});
+```
+
+单 turn 事件时序：
+
+```
+turn/start
+└─ step/start
+   user/message                       本 step 进入的输入
+   assistant/chunk × N                流式增量（文本/思考/工具参数）
+   assistant/message                  组装完成的完整消息（usage 随行，
+                                       sourceEventSeqs 回链 chunk seq）
+   (tool/call → tool/result) × K      逐对交错：call₁ → result₁ → call₂ → …
+└─ step/end                           finally 必发
+turn/end                              finally 必发，携带结束原因
+```
+
+事件类型速查（按用途分组）：
+
+| 分组 | 事件 | 说明 |
+|------|------|------|
+| 边界 | `turn/start` `turn/end` `step/start` `step/end` | turn 结束即完成信号，`TurnEndReason` 6 种：completed/aborted/blocked/error/max-tokens/interrupted |
+| 流式增量 | `assistant/chunk` | 7 种 StreamChunk：文本/思考/工具参数增量、块边界、usage、finish |
+| 表面消息 | `user/message` `assistant/message` `tool/result` | 决定模型可见上下文；assistant/message 携带 usage 和 sourceEventSeqs 回链 |
+| 工具 | `tool/call` | callId 与 tool/result 配对 |
+| 簿记 | `compaction/*` `session/end-seed` | 压缩事务、持久化边界 |
+
+> `todo/write`、`request/header`、`request/context` 三类事件已定义但当前主流程无产生点，出现时按需处理。
+
+与 `stream()` 的行为差异：仅过滤逻辑不同（文本投影 vs 全量透传），冷发布者/背压/取消/单订阅语义完全一致。完整演示见 `EventsExample`。
+
 ### 在 Spring Boot 中桥接 SSE（前端流式对话）
 
 duo-agent 是**纯 Java SDK，不绑定任何框架**——`stream()` 返回的 `Flow.Publisher` 是
@@ -233,6 +302,29 @@ public class ChatController {
     }
 }
 ```
+
+#### 多事件类型变体（chatEvents → SSE）
+
+前端要渲染完整工作过程（工具调用、思考过程）时，把 `stream` 换成 `chatEvents`，
+SSE 的 `event:` 字段直接用事件类型，前端按事件名分别渲染：
+
+```java
+agent.chatEvents(request.message()).subscribe(new Flow.Subscriber<>() {
+    // onSubscribe 同上
+    @Override
+    public void onNext(SessionEvent event) {
+        try {
+            // event: 字段 = 事件类型（turn/start、assistant/chunk、tool/call、tool/result、turn/end…）
+            emitter.send(SseEmitter.event().name(event.type()).data(describe(event)));
+        } catch (IOException e) {
+            subscription.cancel();
+        }
+    }
+    // onError/onComplete 同上
+});
+```
+
+前端即可按 `tool_call` / `tool_result` / `turn_end` 等事件名分栏渲染 Agent 工作过程。
 
 #### Spring WebFlux（Flux 方式）
 
@@ -324,7 +416,7 @@ Session session = agent.getSession();
 duo-agent/
 ├── duo-agent-sdk/          # SDK 核心模块
 │   ├── src/main/java/      # SDK 源码
-│   └── src/test/java/      # SDK 单元测试（224 个测试）
+│   └── src/test/java/      # SDK 单元测试（232 个测试）
 ├── duo-agent-example/      # 示例/调试模块
 │   └── src/main/java/      # 使用示例
 └── pom.xml                 # 父 POM
@@ -381,6 +473,9 @@ mvn exec:java -pl duo-agent-example -Dexec.mainClass="com.example.ToolCallingExa
 **duo-agent-example** - 示例项目：
 - `HelloWorldExample.java` - Builder API 快速开始（推荐）
 - `QuickStartExample.java` - 底层 API 演示（手动组装组件）
+- `StreamingChatExample.java` - stream() 流式输出演示
+- `EventsExample.java` - chatEvents() 多事件流演示（完整工作过程）
+- `ReasonerExample.java` - 推理模型（deepseek-reasoner）验证
 - `BasicAgentExample.java` - 基础示例
 - `ToolCallingExample.java` - 工具调用演示
 - `DeepSeekToolsDemo.java` - 工具链稳定性测试
@@ -429,7 +524,7 @@ var agent = new ReactLoopAgent(...);
 ### 运行单元测试
 
 ```bash
-# 运行全部测试（224 个）
+# 运行全部测试（232 个）
 mvn test
 
 # 运行 SDK 测试
@@ -478,7 +573,7 @@ var agent = DuoAgent.builder()
 
 ## 📊 质量保证
 
-- ✅ **224 个单元测试** - 覆盖核心功能（含流式 API 测试）
+- ✅ **232 个单元测试** - 覆盖核心功能（含流式 API 测试）
 - ✅ **四轮 AI 代码审查** - 45 个问题全部修复
 - ✅ **100% 工具链稳定性** - 经过 DeepSeek API 实测验证
 - ✅ **零依赖** - 纯 Java 21，无第三方库

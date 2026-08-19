@@ -21,6 +21,14 @@ public record SessionEventAssistantMessage(
     ) {
         this(seq, System.currentTimeMillis(), false, surfaceOp, null, turn, step, message, usage);
     }
+
+    public SessionEventAssistantMessage(
+            int seq, int turn, int step, Message.AssistantMessage message,
+            SurfaceOp surfaceOp, int[] sourceEventSeqs, TokenUsage usage
+    ) {
+        this(seq, System.currentTimeMillis(), false, surfaceOp, sourceEventSeqs,
+                turn, step, message, usage);
+    }
     @Override
     public String type() {
         return SessionEventTypes.ASSISTANT_MESSAGE;
