@@ -4,7 +4,7 @@ import dev.duo.api.agent.Agent;
 import dev.duo.core.session.Session;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
+import java.util.concurrent.Flow;
 
 /**
  * Duo Agent 简化 API - 开箱即用的 AI Agent 门面。
@@ -94,36 +94,60 @@ public interface DuoAgent {
     CompletableFuture<String> chatAsync(String message);
 
     /**
-     * 流式对话 - 实时接收响应片段。
+     * 流式对话 - 返回文本增量的响应式流。
      * <p>
-     * <b>⚠️ 当前未实现：</b> 此方法目前总是抛出 {@link UnsupportedOperationException}。
-     * duo-agent 的 session 事件是完整消息追加，不是增量 chunk。
-     * 如需流式功能，请等待 DeepSeekAdapter SSE streaming 实现。
+     * 基于 JDK 原生 {@link Flow.Publisher}（Reactive Streams 规范），
+     * 零第三方依赖。Spring WebFlux 用户可用 {@code Flux.from(...)} 一行桥接，
+     * RxJava 用户可用 {@code Flowable.fromPublisher(...)}。
      * </p>
      * <p>
-     * 未来支持时，将适合需要即时反馈的场景，如聊天界面。
-     * 每当 Agent 生成新的文本片段时，onChunk 回调会被触发。
+     * <b>冷发布者：</b>调用本方法不发起任何请求，{@code subscribe} 订阅时才开始对话。
+     * 文本增量实时推送（{@code onNext}），对话轮结束时发送 {@code onComplete}；
+     * 执行失败时发送 {@code onError}。完整响应文本可由订阅者自行拼接增量获得。
      * </p>
      * <p>
-     * <b>预期示例（未来）：</b>
+     * <b>示例：</b>
      * <pre>{@code
-     * agent.chatStream("写一个排序算法", chunk -> {
-     *     System.out.print(chunk);  // 实时打印每个片段
+     * agent.stream("写一个排序算法").subscribe(new Flow.Subscriber<>() {
+     *     private Flow.Subscription subscription;
+     *     public void onSubscribe(Flow.Subscription s) {
+     *         subscription = s;
+     *         s.request(Long.MAX_VALUE);  // 或按需分批 request(n)
+     *     }
+     *     public void onNext(String chunk) {
+     *         System.out.print(chunk);  // 实时打印每个文本增量
+     *     }
+     *     public void onError(Throwable t) { t.printStackTrace(); }
+     *     public void onComplete() { /* 对话轮结束 *&#47; }
      * });
+     *
+     * // Spring WebFlux 用户
+     * Flux<String> flux = Flux.from(agent.stream("写一个排序算法"));
      * }</pre>
+     * </p>
+     * <p>
+     * <b>行为说明：</b>
+     * <ul>
+     *   <li><b>仅推送文本增量</b> - 推理内容（{@code <think>} 思考过程）和
+     *       工具调用参数不会推送给订阅者</li>
+     *   <li><b>多轮工具调用</b> - Agent 使用工具后会再次调用模型，
+     *       订阅者会收到多段连续的文本流</li>
+     *   <li><b>背压</b> - 通过 {@code request(n)} 控制拉取节奏；
+     *       消费慢于生产时增量在内部缓冲，不会丢失</li>
+     *   <li><b>取消语义</b> - {@code cancel()} 停止推送并释放资源，
+     *       但底层对话轮会继续执行完毕（不中断模型推理，仍消耗一次 API 调用）</li>
+     *   <li><b>单订阅</b> - 每次调用返回的 Publisher 仅支持订阅一次，
+     *       重复订阅将收到 {@code onError}</li>
+     *   <li><b>线程模型</b> - {@code onNext} 等回调可能在驱动线程上执行，
+     *       订阅者需保证自身处理的线程安全（如需固定线程请在订阅者内自行切换）</li>
+     * </ul>
      * </p>
      *
      * @param message 用户消息
-     * @param onChunk 回调函数，每个文本片段会触发一次
-     * @throws UnsupportedOperationException 当前总是抛出，因为流式支持未实现
+     * @return 文本增量流（冷发布者，订阅时才发起对话）
+     * @throws IllegalArgumentException 如果 message 为空
      */
-    default void chatStream(String message, Consumer<String> onChunk) {
-        throw new UnsupportedOperationException(
-                "chatStream() 当前未实现真正的流式支持。" +
-                "duo-agent 的 session 事件是完整消息追加，不是增量 chunk。" +
-                "如需流式功能，请等待 DeepSeekAdapter SSE streaming 实现。"
-        );
-    }
+    Flow.Publisher<String> stream(String message);
 
     /**
      * 获取底层 Agent 实例（高级用户）。

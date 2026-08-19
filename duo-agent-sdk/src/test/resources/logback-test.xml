@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 测试专用日志配置：默认 INFO，避免 CI 日志膨胀、失败摘要被淹没。
+     需要 SDK 内部流程日志（turn 生命周期、工具执行、chunk 追加）排查问题时：
+     mvn test -Dduo.test.log.level=DEBUG
+     纯控制台输出（覆盖 main 配置的 FILE appender，测试不写 logs/ 目录）。 -->
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{20} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <root level="WARN">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <!-- SDK 日志级别可通过系统属性开关，默认 INFO -->
+    <logger name="dev.duo" level="${duo.test.log.level:-INFO}" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+</configuration>

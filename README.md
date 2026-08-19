@@ -7,7 +7,7 @@
 - 🚀 **极简 API** - Builder 模式，开箱即用
 - 🔧 **内置工具链** - bash、文件操作、代码编辑、搜索等
 - 🔌 **零依赖** - 纯 Java 21，无第三方依赖
-- 🧪 **高质量** - 213 个单元测试，100% 工具链稳定性
+- 🧪 **高质量** - 222 个单元测试，100% 工具链稳定性
 - 🎯 **ReAct 架构** - 成熟的推理-行动循环模式
 - 🧠 **推理模式** - 支持 DeepSeek-R1 等深度推理模型
 
@@ -122,6 +122,178 @@ future.thenAccept(System.out::println);
 > **线程安全提示：** 同一 DuoAgent 实例共享底层 Session，不是线程安全的。
 > 如需并发处理多个请求，请为每个请求创建独立的 Agent 实例。
 
+### 流式对话（响应式流）
+
+`stream()` 返回 JDK 原生 `Flow.Publisher<String>`（Reactive Streams 规范），零第三方依赖：
+
+```java
+agent.stream("写一个排序算法").subscribe(new Flow.Subscriber<>() {
+    private Flow.Subscription subscription;
+
+    @Override
+    public void onSubscribe(Flow.Subscription s) {
+        subscription = s;
+        s.request(Long.MAX_VALUE);  // 或按需分批 request(n)
+    }
+
+    @Override
+    public void onNext(String chunk) {
+        System.out.print(chunk);  // 文本增量实时打印
+    }
+
+    @Override
+    public void onError(Throwable t) { t.printStackTrace(); }
+
+    @Override
+    public void onComplete() { /* 对话轮结束 */ }
+});
+```
+
+Spring WebFlux / RxJava 用户一行桥接：
+
+```java
+Flux<String> flux = Flux.from(agent.stream("写一个排序算法"));          // Reactor
+Flowable<String> flowable = Flowable.fromPublisher(agent.stream(...)); // RxJava
+```
+
+行为说明：
+- **冷发布者** — 订阅时才发起对话，未订阅不消耗 API 调用
+- **仅推送文本增量** — 推理内容（`<think>` 思考过程）和工具调用参数不会推送
+- **多轮工具调用** — Agent 使用工具后会再次调用模型，订阅者收到多段连续文本流
+- **背压** — 通过 `request(n)` 控制拉取节奏，消费慢时增量内部缓冲不丢失
+- **取消** — `cancel()` 停止推送并释放资源，但底层对话轮继续执行完毕
+- **单订阅** — 每次调用返回的 Publisher 仅支持订阅一次
+
+### 在 Spring Boot 中桥接 SSE（前端流式对话）
+
+duo-agent 是**纯 Java SDK，不绑定任何框架**——`stream()` 返回的 `Flow.Publisher` 是
+Reactive Streams 中立标准，Spring Boot 应用直接在自己的代码里桥接即可，
+duo-agent 侧无需任何额外依赖。以下示例可整体拷贝到你的 Spring 项目。
+
+**关键前提：每请求一个 Agent 实例。** DuoAgent 非线程安全且 Session 有状态，
+不要注入单例 Agent 复用；`DuoAgent.builder()` 构建成本极低，每个请求新建。
+
+#### Spring MVC（SseEmitter 方式）
+
+```java
+@RestController
+public class ChatController {
+
+    @PostMapping(value = "/api/chat/stream")
+    public SseEmitter chat(@RequestBody ChatRequest request) {
+        SseEmitter emitter = new SseEmitter(0L);  // 不超时
+        var agent = DuoAgent.builder()            // 每请求新建 Agent
+                .apiFormat("openai")
+                .baseUrl("https://api.deepseek.com")
+                .apiKey(System.getenv("DEEPSEEK_API_KEY"))
+                .model("deepseek-chat")
+                .contextWindow(128000)
+                .withCodeTools()
+                .build();
+
+        agent.stream(request.message()).subscribe(new Flow.Subscriber<>() {
+            private Flow.Subscription subscription;
+
+            @Override
+            public void onSubscribe(Flow.Subscription s) {
+                subscription = s;
+                s.request(Long.MAX_VALUE);
+            }
+
+            @Override
+            public void onNext(String chunk) {
+                try {
+                    emitter.send(SseEmitter.event().name("delta").data(chunk));
+                } catch (IOException e) {
+                    subscription.cancel();  // 客户端断开，停止推送
+                }
+            }
+
+            @Override
+            public void onError(Throwable t) {
+                try {
+                    emitter.send(SseEmitter.event().name("error").data(t.getMessage()));
+                } catch (IOException ignored) {
+                    // 客户端已断开
+                }
+                emitter.complete();
+            }
+
+            @Override
+            public void onComplete() {
+                try {
+                    emitter.send(SseEmitter.event().name("done"));
+                } catch (IOException ignored) {
+                    // 客户端已断开
+                }
+                emitter.complete();
+            }
+        });
+        return emitter;
+    }
+}
+```
+
+#### Spring WebFlux（Flux 方式）
+
+```java
+@RestController
+public class ChatController {
+
+    @PostMapping(value = "/api/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> chat(@RequestBody ChatRequest request) {
+        var agent = DuoAgent.builder()/* 同上配置 */ .build();
+        return Flux.from(agent.stream(request.message()))
+                .map(chunk -> ServerSentEvent.<String>builder(chunk).event("delta").build())
+                .concatWith(Flux.just(ServerSentEvent.<String>builder("").event("done").build()))
+                .onErrorResume(e -> Flux.just(
+                        ServerSentEvent.<String>builder(e.getMessage()).event("error").build()));
+    }
+}
+```
+
+背压在 WebFlux 下是端到端打通的：前端消费慢 → Netty 缓冲堆积 → Flux 自动减少
+`request(n)` → SDK 内部缓冲兜住 → 不丢数据、不爆内存。
+
+#### 前端接入（fetch 流式读取，支持 POST）
+
+```js
+const resp = await fetch('/api/chat/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: '写一个排序算法' })
+});
+const reader = resp.body.getReader();
+const decoder = new TextDecoder();
+let buffer = '';
+while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    // SSE 帧以空行（\n\n）分隔，每帧内解析 event: 与 data: 行
+    const frames = buffer.split('\n\n');
+    buffer = frames.pop();  // 最后一段可能不完整，留到下一轮
+    for (const frame of frames) {
+        const event = /^event: (.+)$/m.exec(frame)?.[1];
+        const data = /^data: (.*)$/m.exec(frame)?.[1] ?? '';
+        if (event === 'delta') output.textContent += data;
+        if (event === 'done')  console.log('对话完成');
+        if (event === 'error') console.error('对话失败:', data);
+    }
+}
+```
+
+> 简单 GET 场景也可用浏览器原生 `new EventSource(url)`，但它不支持 POST，
+> 消息体较大或涉及鉴权时推荐上面的 fetch 方案。
+
+#### 实践建议
+
+- **完成/错误信号约定** — 用 `event: done` / `event: error` 哨兵帧让前端明确区分
+  正常结束与失败，不要只断连接
+- **心跳保活** — 推理模型思考期可能数十秒无输出，中间有 Nginx/网关时需定期发送
+  SSE 注释行（`: ping`）防止空闲连接被掐断
+- **断线语义** — 当前流是一次性对话，断线即本轮作废，前端重新发起即可
+
 ### 访问底层 API（高级用户）
 
 ```java
@@ -152,7 +324,7 @@ Session session = agent.getSession();
 duo-agent/
 ├── duo-agent-sdk/          # SDK 核心模块
 │   ├── src/main/java/      # SDK 源码
-│   └── src/test/java/      # SDK 单元测试（213 个测试）
+│   └── src/test/java/      # SDK 单元测试（222 个测试）
 ├── duo-agent-example/      # 示例/调试模块
 │   └── src/main/java/      # 使用示例
 └── pom.xml                 # 父 POM
@@ -257,7 +429,7 @@ var agent = new ReactLoopAgent(...);
 ### 运行单元测试
 
 ```bash
-# 运行全部测试（213 个）
+# 运行全部测试（222 个）
 mvn test
 
 # 运行 SDK 测试
@@ -301,8 +473,6 @@ var agent = DuoAgent.builder()
 
 ## ⚠️ 已知限制
 
-- **chatStream() 未实现** - 当前调用会抛出 `UnsupportedOperationException`，
-  等待 DeepSeekAdapter SSE streaming 支持后开放
 - **Anthropic 格式未支持** - `apiFormat()` 目前仅接受 `"openai"`，
   Anthropic 格式计划在未来版本支持
 - **reasoningTimeout 未生效** - 推理模式下的超时配置暂未应用到 LLM 调用，
@@ -310,7 +480,7 @@ var agent = DuoAgent.builder()
 
 ## 📊 质量保证
 
-- ✅ **213 个单元测试** - 覆盖核心功能
+- ✅ **222 个单元测试** - 覆盖核心功能（含流式 API 测试）
 - ✅ **四轮 AI 代码审查** - 45 个问题全部修复
 - ✅ **100% 工具链稳定性** - 经过 DeepSeek API 实测验证
 - ✅ **零依赖** - 纯 Java 21，无第三方库

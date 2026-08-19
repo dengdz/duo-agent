@@ -169,8 +169,14 @@ public class ReactLoopAgent implements Agent {
         try {
             activity.get();
         } catch (ExecutionException e) {
-            // 活动已完成但有异常，记录异常但不阻塞 whenIdle 返回
-            logger.debug("Agent activity completed with error", e);
+            // 活动已完成但有异常，记录异常但不阻塞 whenIdle 返回。
+            // 吞异常处必须留痕：WARN 单行摘要保证任何级别可见，堆栈留在 DEBUG 层。
+            // 注意：cause 必须显式 toString()——SLF4J 会把尾随 Throwable 参数
+            // 特殊处理为异常对象而不填充占位符
+            var cause = e.getCause() != null ? e.getCause() : e;
+            logger.warn("Agent {} 活动以异常结束（whenIdle 忽略并正常返回）: {}",
+                    id, cause.toString());
+            logger.debug("Agent {} 活动异常堆栈", id, e);
         }
     }
 
