@@ -14,12 +14,9 @@ import dev.duo.model.llm.MessageFactory;
 import dev.duo.model.llm.MessageSource;
 import dev.duo.model.llm.ToolDefinition;
 import dev.duo.model.llm.ToolExecutionResult;
-import dev.duo.model.session.SessionEventAssistantMessage;
 import dev.duo.model.session.SessionEventTurnEnd;
-import dev.duo.model.session.SessionEventUserMessage;
 import dev.duo.model.session.SessionHeader;
 import dev.duo.model.session.SessionId;
-import dev.duo.model.session.TurnEndReason;
 
 import java.nio.file.Path;
 import java.util.List;

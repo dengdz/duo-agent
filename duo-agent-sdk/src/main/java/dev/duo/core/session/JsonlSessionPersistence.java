@@ -38,6 +38,9 @@ import java.util.concurrent.TimeUnit;
  */
 public final class JsonlSessionPersistence implements SessionPersistence, AutoCloseable {
 
+    private static final org.slf4j.Logger logger =
+            org.slf4j.LoggerFactory.getLogger(JsonlSessionPersistence.class);
+
     private static final String FILE_SUFFIX = ".jsonl";
     /** write-behind 批处理的最大等待时长（对应 dsh 的 DEFAULT_WRITE_BATCH_MAX_DELAY_MS）。 */
     private static final long WRITE_BATCH_DELAY_MS = 200;
@@ -82,10 +85,15 @@ public final class JsonlSessionPersistence implements SessionPersistence, AutoCl
         }
     }
 
-    /** 供 {@link Session#onAppend} 监听接入的非抛错入口；写入失败记入 writer 失败状态。 */
+    /**
+     * 供 {@link Session#onAppend} 监听接入的非抛错入口；写入失败记入 writer 失败状态。
+     * <p>注意：会话未 create/load 时事件无处可写，记录 warn 后丢弃（接线错误必须可见）。</p>
+     */
     public void acceptFromListener(SessionId id, SessionEvent event) {
         var writer = writers.get(id);
         if (writer == null) {
+            logger.warn("会话 {} 尚未 create/load，事件 {} 被丢弃——请先 create 或 load 建立写入器",
+                    id, event.type());
             return;
         }
         synchronized (writer) {
@@ -122,10 +130,14 @@ public final class JsonlSessionPersistence implements SessionPersistence, AutoCl
             }
         }
 
-        // 冷恢复：建立写入器（seq 从闭合后日志尾续）；崩溃遗留的 open turn 持久化闭合
-        var closers = InterruptedTurnRepair.closersFor(events);
+        // 冷恢复：建立写入器（seq 从闭合后日志尾续；仅 header 的空日志从 0 起）；
+        // 崩溃遗留的 open turn 持久化闭合。
+        // 活会话（writer 已存在）二次 load 只读返回磁盘快照——内存 pending 领先于磁盘，
+        // 此时不得基于磁盘视图做修复写入（dsh 语义：不得 crash-repair 活会话）。
+        var closers = events.isEmpty() ? List.<SessionEvent>of() : InterruptedTurnRepair.closersFor(events);
         var writer = writers.computeIfAbsent(id,
-                ignored -> new SessionWriter(header, file, events.getLast().seq() + 1));
+                ignored -> new SessionWriter(header, file,
+                        events.isEmpty() ? 0 : events.getLast().seq() + 1));
         synchronized (writer) {
             writer.materializeIfAbsent();
             if (!closers.isEmpty()) {
@@ -136,6 +148,10 @@ public final class JsonlSessionPersistence implements SessionPersistence, AutoCl
         return new SessionInspection(header, List.copyOf(events));
     }
 
+    /**
+     * 列出所有已物化会话的元数据（只读各文件首行，不解析完整日志）。
+     * 任一文件首行损坏即抛出（fail loud），不静默跳过坏文件。
+     */
     @Override
     public List<SessionHeader> list() throws IOException {
         var headers = new ArrayList<SessionHeader>();
@@ -187,8 +203,10 @@ public final class JsonlSessionPersistence implements SessionPersistence, AutoCl
         for (var id : writers.keySet()) {
             try {
                 flush(id);
-            } catch (IOException ignored) {
-                // 定时刷失败保留在 writer 的待写缓冲中，下次重试；最终失败由 flush/close 暴露
+            } catch (Exception e) {
+                // 兜底捕获一切异常：周期任务抛出未捕获 Throwable 会被调度器取消，
+                // 导致所有会话的定时刷永久停摆；单会话失败只影响该会话（writer 已保留失败）
+                logger.error("定时刷会话 {} 失败，保留待写缓冲待重试/关闭时暴露", id, e);
             }
         }
     }
@@ -265,21 +283,31 @@ public final class JsonlSessionPersistence implements SessionPersistence, AutoCl
                 if (event.seq() != durableNextSeq) {
                     failure = new IOException("事件 seq 不连续：期望 " + durableNextSeq
                             + "，实际 " + event.seq() + "（" + event.type() + "）");
-                    throw failure;
+                    throw new IOException(failure.getMessage(), failure);
                 }
                 durableNextSeq++;
             }
-            materializeIfAbsent();
-            var sb = new StringBuilder(pending.size() * 96);
-            for (var event : pending) {
-                sb.append(SessionEventCodec.encode(event)).append('\n');
+            try {
+                materializeIfAbsent();
+                var sb = new StringBuilder(pending.size() * 96);
+                for (var event : pending) {
+                    sb.append(SessionEventCodec.encode(event)).append('\n');
+                }
+                Files.write(file, sb.toString().getBytes(StandardCharsets.UTF_8),
+                        StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+                try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
+                    channel.force(false);
+                }
+            } catch (IOException | RuntimeException e) {
+                // 失败保留在 writer（不再重试同一坏批次，close 时最终暴露）；
+                // 抛包装实例防止 try-with-resources 的 self-suppression。
+                // RuntimeException（如编码失败）必须在此收敛为受检失败：
+                // 否则会杀死定时刷周期任务，导致全部会话的持久化静默停摆。
+                failure = e instanceof IOException io ? io
+                        : new IOException("事件批次编码/写入失败: " + e.getMessage(), e);
+                throw new IOException(failure.getMessage(), failure);
             }
-            Files.write(file, sb.toString().getBytes(StandardCharsets.UTF_8),
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             pending.clear();
-            try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
-                channel.force(false);
-            }
         }
     }
 }

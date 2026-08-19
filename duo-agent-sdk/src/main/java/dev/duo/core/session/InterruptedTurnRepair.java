@@ -1,9 +1,7 @@
 package dev.duo.core.session;
 
 import dev.duo.model.llm.ContentBlock;
-import dev.duo.model.llm.Message;
 import dev.duo.model.llm.MessageFactory;
-import dev.duo.model.llm.MessageSource;
 import dev.duo.model.session.SessionEvent;
 import dev.duo.model.session.SessionEventAssistantMessage;
 import dev.duo.model.session.SessionEventStepEnd;
@@ -12,7 +10,6 @@ import dev.duo.model.session.SessionEventToolCall;
 import dev.duo.model.session.SessionEventToolResult;
 import dev.duo.model.session.SessionEventTurnEnd;
 import dev.duo.model.session.SessionEventTurnStart;
-import dev.duo.model.session.SessionEventUserMessage;
 import dev.duo.model.session.SurfaceOp;
 import dev.duo.model.session.TurnEndReason;
 import dev.duo.util.CallId;

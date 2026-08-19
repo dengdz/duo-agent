@@ -3,12 +3,10 @@ package dev.duo.core.session;
 import dev.duo.model.llm.ContentBlock;
 import dev.duo.model.llm.FinishReason;
 import dev.duo.model.llm.LlmFailure;
-import dev.duo.model.llm.Message;
 import dev.duo.model.llm.MessageFactory;
 import dev.duo.model.llm.MessageSource;
 import dev.duo.model.llm.StreamChunk;
 import dev.duo.model.llm.TokenUsage;
-import dev.duo.model.session.SessionEvent;
 import dev.duo.model.session.SessionEventAssistantChunk;
 import dev.duo.model.session.SessionEventAssistantMessage;
 import dev.duo.model.session.SessionEventRequestContext;
@@ -110,9 +108,10 @@ class SessionEventCodecTest {
 
     @Test
     void escapingSurvivesControlCharactersAndQuotes() {
+        // 含退格与换页控制符（quote 以 u 转义形式输出）与引号/反斜杠/换行/制表/Unicode
         var event = new SessionEventUserMessage(0, 1L, false, null, null,
                 MessageFactory.createUserMessage(
-                        List.of(new ContentBlock.Text("quote\" backslash\\ newline\n tab\t unicode✓")),
+                        List.of(new ContentBlock.Text("quote\" backslash\\ newline\n tab\t \b \f unicode✓")),
                         new MessageSource.User()));
         assertEquals(event, SessionEventCodec.decode(SessionEventCodec.encode(event)));
     }

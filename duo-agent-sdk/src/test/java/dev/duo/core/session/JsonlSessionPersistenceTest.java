@@ -278,4 +278,18 @@ class JsonlSessionPersistenceTest {
             assertEquals(3, session.seq(), "Session 续写 seq 与磁盘尾衔接");
         }
     }
+
+    @Test
+    void headerOnlyLogLoadsAsEmptyWithoutCrash() throws IOException {
+        // 批量写部分失败的遗留形态：文件只有 header 行——load 不得抛 NoSuchElementException
+        var id = new SessionId("header-only");
+        var file = fileOf(id);
+        Files.createDirectories(baseDir);
+        Files.writeString(file, SessionEventCodec.encodeHeader(headerOf(id)) + "\n");
+
+        try (var persistence = new JsonlSessionPersistence(baseDir)) {
+            var inspection = persistence.load(id);
+            assertEquals(0, inspection.events().size(), "仅 header 的日志应加载为空事件");
+        }
+    }
 }

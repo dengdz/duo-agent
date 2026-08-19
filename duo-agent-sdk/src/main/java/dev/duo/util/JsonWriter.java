@@ -32,8 +32,10 @@ public final class JsonWriter {
             case null -> sb.append("null");
             case String s -> quote(sb, s);
             case Boolean b -> sb.append(b);
-            case Double d when !d.isInfinite() && !d.isNaN() -> sb.append(d);
-            case Float f when !f.isInfinite() && !f.isNaN() -> sb.append(f);
+            case Double d when d.isInfinite() || d.isNaN() ->
+                    throw new IllegalArgumentException("JSON 不支持非有限浮点值: " + d);
+            case Float f when f.isInfinite() || f.isNaN() ->
+                    throw new IllegalArgumentException("JSON 不支持非有限浮点值: " + f);
             case Number n -> sb.append(n);
             case Map<?, ?> m -> {
                 sb.append('{');
