@@ -123,6 +123,9 @@ class DeepSeekRequestBuilder {
         if (options.maxTokens() != null) {
             sb.append("  \"max_tokens\": ").append(options.maxTokens()).append(",\n");
         }
+        
+        // DeepSeek-R1 推理模式无需额外参数，模型本身支持
+        // 如果未来需要配置推理参数（如 reasoning_effort），在这里添加
 
         // 去掉末尾的逗号
         var result = sb.toString();

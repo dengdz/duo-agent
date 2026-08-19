@@ -26,7 +26,9 @@ public record GenerateOptions(
         Integer maxTokens,
         List<String> stop,
         /** 辅助模型调用的提供方中立分类。 */
-        String purpose
+        String purpose,
+        /** 是否启用深度推理（如 DeepSeek-R1）。 */
+        Boolean reasoningEnabled
 ) {
     public GenerateOptions {
         if (provider == null || provider.isBlank()) {
@@ -42,12 +44,12 @@ public record GenerateOptions(
 
     /** 创建仅含 provider、model 和 messages 的最小请求。 */
     public GenerateOptions(String provider, String model, List<Message> messages) {
-        this(provider, model, messages, null, null, null, null, null, null);
+        this(provider, model, messages, null, null, null, null, null, null, null);
     }
 
     /** 创建含 system 提示与工具 schema 的请求（无温度/停止等可选参数）。 */
     public GenerateOptions(String provider, String model, List<Message> messages,
                            String system, List<ToolSchema> tools) {
-        this(provider, model, messages, system, tools, null, null, null, null);
+        this(provider, model, messages, system, tools, null, null, null, null, null);
     }
 }

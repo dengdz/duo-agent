@@ -355,7 +355,23 @@ public class ReactLoopAgent implements Agent {
         var assembly = systemPrompt.assemble();
         var system = SystemPromptImpl.renderPrompt(assembly);
         var tools = assembly.tools().isEmpty() ? null : assembly.tools();
-        return new GenerateOptions(provider, model, messages, system, tools);
+        
+        // 从 AgentOptions 获取推理配置
+        var reasoningEnabled = options.isReasoningEnabled();
+        
+        return new GenerateOptions(
+                provider, 
+                model, 
+                messages, 
+                system, 
+                tools,
+                null,  // temperature
+                // 保持 null 语义，由模型决定默认输出长度，避免截断推理模型长输出
+                options.maxOutputTokens(),  // maxTokens - 可能为 null
+                null,  // stop
+                null,  // purpose
+                reasoningEnabled  // reasoningEnabled
+        );
     }
 
     /** request-error 决策链：无人接管恢复权时保持失败。 */
