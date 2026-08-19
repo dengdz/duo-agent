@@ -30,6 +30,8 @@ public class ScriptedStreamAdapter extends LlmAdapter {
 
     private final List<StreamChunk> script;
     private final RuntimeException failure;
+    /** 首次调用回放脚本前的等待毫秒数（模拟推理模型思考耗时）。 */
+    private final long delayMillis;
     private final AtomicBoolean firstCall = new AtomicBoolean(true);
 
     /**
@@ -38,7 +40,7 @@ public class ScriptedStreamAdapter extends LlmAdapter {
      * @param script 要依次回调的 chunk 列表
      */
     public ScriptedStreamAdapter(List<StreamChunk> script) {
-        this(script, null);
+        this(script, null, 0);
     }
 
     /**
@@ -48,8 +50,21 @@ public class ScriptedStreamAdapter extends LlmAdapter {
      * @param failure 产出全部 chunk 后回调 onError 的异常；为 null 则正常结束
      */
     public ScriptedStreamAdapter(List<StreamChunk> script, RuntimeException failure) {
+        this(script, failure, 0);
+    }
+
+    /**
+     * 创建带延迟的适配器：首次调用先等待 {@code delayMillis} 毫秒再回放脚本
+     * （模拟推理模型思考耗时，用于超时行为测试）。
+     *
+     * @param script 要依次回调的 chunk 列表
+     * @param failure 回放后回调 onError 的异常；为 null 则正常结束
+     * @param delayMillis 首次调用前的等待毫秒数
+     */
+    public ScriptedStreamAdapter(List<StreamChunk> script, RuntimeException failure, long delayMillis) {
         this.script = List.copyOf(script);
         this.failure = failure;
+        this.delayMillis = delayMillis;
     }
 
     /** 便捷构造：单个文本块的完整 chunk 序列（block-start → text-delta → block-end → usage → finish-stop）。 */
@@ -69,23 +84,30 @@ public class ScriptedStreamAdapter extends LlmAdapter {
 
     @Override
     public void stream(GenerateOptions options, StreamCallback callback) {
+        // 异步回放（对齐真实 DeepSeekAdapter 的 sendAsync 语义）：
+        // 同步执行会让 ReactLoopAgent 的 barrier 在 stream() 返回后才等待，
+        // 流早已完成、超时逻辑永不生效
         // 首次调用回放脚本；后续调用（如脚本含工具调用导致的下一 step）返回固定文本，
         // 防止无状态脚本在 agent 工具循环中被重复消费造成死循环
-        if (firstCall.compareAndSet(true, false)) {
-            for (var chunk : script) {
-                callback.onChunk(chunk);
+        var isFirstCall = firstCall.compareAndSet(true, false);
+        Thread.ofVirtual().name("scripted-adapter").start(() -> {
+            try {
+                if (isFirstCall && delayMillis > 0) {
+                    Thread.sleep(delayMillis);
+                }
+                var chunks = isFirstCall ? script : textReply(SUBSEQUENT_REPLY);
+                for (var chunk : chunks) {
+                    callback.onChunk(chunk);
+                }
+                if (isFirstCall && failure != null) {
+                    callback.onError(failure);
+                    return;
+                }
+                callback.onComplete();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                callback.onError(e);
             }
-            if (failure != null) {
-                callback.onError(failure);
-                return;
-            }
-            callback.onComplete();
-            return;
-        }
-
-        for (var chunk : textReply(SUBSEQUENT_REPLY)) {
-            callback.onChunk(chunk);
-        }
-        callback.onComplete();
+        });
     }
 }

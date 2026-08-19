@@ -24,7 +24,7 @@ public record AgentOptions(
         Integer maxOutputTokens,
         /** 是否启用模型的深度推理能力（如 DeepSeek-R1, OpenAI O1）。 */
         Boolean reasoningEnabled,
-        /** 推理模式下的超时时间（注意：当前版本未实际应用）。 */
+        /** 推理模式下的超时时间（reasoningEnabled=true 时生效，默认 5 分钟）。 */
         Duration reasoningTimeout,
         /** LLM 调用超时时间（默认 60 秒）。 */
         Duration llmTimeout,
@@ -99,9 +99,8 @@ public record AgentOptions(
     /**
      * 获取推理超时时间，如果未设置则返回默认值 5 分钟。
      * <p>
-     * <b>注意：</b>当前版本此配置未实际应用到 LLM 调用超时中。
-     * ReactLoopAgent 始终使用 {@link #getLlmTimeoutOrDefault()}。
-     * 如需更长超时，请通过 {@link dev.duo.api.DuoAgentBuilder#timeout(java.time.Duration)} 设置。
+     * 仅在 {@link #isReasoningEnabled()} 为 true 时由 ReactLoopAgent 应用
+     * （推理模型思考耗时长）；普通模式使用 {@link #getLlmTimeoutOrDefault()}。
      * </p>
      *
      * @return 推理超时时间

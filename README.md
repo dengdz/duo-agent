@@ -7,7 +7,7 @@
 - 🚀 **极简 API** - Builder 模式，开箱即用
 - 🔧 **内置工具链** - bash、文件操作、代码编辑、搜索等
 - 🔌 **零依赖** - 纯 Java 21，无第三方依赖
-- 🧪 **高质量** - 222 个单元测试，100% 工具链稳定性
+- 🧪 **高质量** - 224 个单元测试，100% 工具链稳定性
 - 🎯 **ReAct 架构** - 成熟的推理-行动循环模式
 - 🧠 **推理模式** - 支持 DeepSeek-R1 等深度推理模型
 
@@ -85,8 +85,8 @@ var agent = DuoAgent.builder()
         .apiKey(System.getenv("DEEPSEEK_API_KEY"))
         .model("deepseek-reasoner")
         .contextWindow(64000)
-        .enableReasoning(true)      // 启用深度推理
-        .timeout(Duration.ofMinutes(5))  // 推理耗时较长，建议加大超时
+        .enableReasoning(true)      // 启用深度推理（超时自动切换为推理超时，默认 5 分钟）
+        // .reasoningTimeout(Duration.ofMinutes(8))  // 可选：自定义推理超时
         .withCodeTools()
         .build();
 ```
@@ -324,7 +324,7 @@ Session session = agent.getSession();
 duo-agent/
 ├── duo-agent-sdk/          # SDK 核心模块
 │   ├── src/main/java/      # SDK 源码
-│   └── src/test/java/      # SDK 单元测试（222 个测试）
+│   └── src/test/java/      # SDK 单元测试（224 个测试）
 ├── duo-agent-example/      # 示例/调试模块
 │   └── src/main/java/      # 使用示例
 └── pom.xml                 # 父 POM
@@ -429,7 +429,7 @@ var agent = new ReactLoopAgent(...);
 ### 运行单元测试
 
 ```bash
-# 运行全部测试（222 个）
+# 运行全部测试（224 个）
 mvn test
 
 # 运行 SDK 测试
@@ -475,12 +475,10 @@ var agent = DuoAgent.builder()
 
 - **Anthropic 格式未支持** - `apiFormat()` 目前仅接受 `"openai"`，
   Anthropic 格式计划在未来版本支持
-- **reasoningTimeout 未生效** - 推理模式下的超时配置暂未应用到 LLM 调用，
-  如需更长超时请使用 `.timeout(Duration)`
 
 ## 📊 质量保证
 
-- ✅ **222 个单元测试** - 覆盖核心功能（含流式 API 测试）
+- ✅ **224 个单元测试** - 覆盖核心功能（含流式 API 测试）
 - ✅ **四轮 AI 代码审查** - 45 个问题全部修复
 - ✅ **100% 工具链稳定性** - 经过 DeepSeek API 实测验证
 - ✅ **零依赖** - 纯 Java 21，无第三方库

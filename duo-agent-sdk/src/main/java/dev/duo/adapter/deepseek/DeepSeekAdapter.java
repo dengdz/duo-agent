@@ -36,12 +36,24 @@ public class DeepSeekAdapter extends LlmAdapter {
     // HTTP 配置常量
     private static final String DEFAULT_BASE_URL = "https://api.deepseek.com";
     private static final String API_KEY_ENV = "DEEPSEEK_API_KEY";
-    private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(60);
+    /** TCP 连接建立超时（仅管建连阶段，不影响响应体读取）。 */
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(60);
+    /**
+     * 单次请求整体超时兜底（未显式指定时使用）。JDK HttpClient 的 HttpRequest.timeout
+     * 覆盖到响应体完成，对 SSE 流式响应即整段生成时长。
+     * <p>
+     * <b>约束：必须始终大于应用层最大超时</b>（llmTimeout / reasoningTimeout 的较大者），
+     * 否则会先于应用层 barrier 掐断流式回复。经由 {@code DuoAgentBuilder} 组装时会按
+     * 应用层超时自动计算并显式传入，仅默认构造路径使用本兜底值。
+     * </p>
+     */
+    private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofMinutes(10);
     private static final int HTTP_OK = 200;
 
     private final HttpClient httpClient;
     private final String baseUrl;
     private final String apiKey;
+    private final Duration requestTimeout;
 
     /** 从 DEEPSEEK_API_KEY 环境变量读取密钥的便捷构造。 */
     public DeepSeekAdapter() {
@@ -55,9 +67,26 @@ public class DeepSeekAdapter extends LlmAdapter {
      * @param baseUrl API 基地址（传 null 用官方默认）
      */
     public DeepSeekAdapter(String apiKey, String baseUrl) {
+        this(apiKey, baseUrl, DEFAULT_REQUEST_TIMEOUT);
+    }
+
+    /**
+     * 显式指定请求超时的构造。
+     * <p>
+     * 请求超时必须大于应用层最大超时（推理模式 reasoningTimeout 默认 5 分钟），
+     * 否则长回复会被 HTTP 层中途掐断。由组装方按 {@code max(llmTimeout, reasoningTimeout)
+     * + 余量} 计算后传入。
+     * </p>
+     *
+     * @param apiKey DeepSeek API 密钥
+     * @param baseUrl API 基地址（传 null 用官方默认）
+     * @param requestTimeout 单次请求整体超时（防连接永久挂起的兜底）
+     */
+    public DeepSeekAdapter(String apiKey, String baseUrl, Duration requestTimeout) {
         this.apiKey = apiKey == null || apiKey.isBlank() ? null : apiKey;
         this.baseUrl = baseUrl == null || baseUrl.isBlank() ? DEFAULT_BASE_URL : baseUrl;
-        this.httpClient = HttpClient.newBuilder().connectTimeout(DEFAULT_TIMEOUT).build();
+        this.requestTimeout = requestTimeout == null ? DEFAULT_REQUEST_TIMEOUT : requestTimeout;
+        this.httpClient = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
     }
 
     @Override
@@ -81,7 +110,7 @@ public class DeepSeekAdapter extends LlmAdapter {
                     .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
                     .header("Accept", "text/event-stream")
-                    .timeout(DEFAULT_TIMEOUT)
+                    .timeout(requestTimeout)
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                     .build();
 

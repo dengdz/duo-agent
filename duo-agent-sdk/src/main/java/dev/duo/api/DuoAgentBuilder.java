@@ -220,12 +220,10 @@ public final class DuoAgentBuilder {
      * 启用后：
      * <ul>
      *   <li>响应可能包含 &lt;think&gt; 推理过程</li>
-     *   <li>需要模型本身支持此特性</li>
+     *   <li>LLM 调用超时自动切换为 {@link #reasoningTimeout(Duration)}
+     *       （默认 5 分钟，普通模式为 60 秒）</li>
+     *   <li>需要模型本身支持此特性（如 deepseek-reasoner）</li>
      * </ul>
-     * </p>
-     * <p>
-     * 当前版本 reasoningTimeout 未实际应用，超时仍使用 llmTimeout（默认 60 秒）。
-     * 如需更长超时，请显式调用 {@link #timeout(Duration)}。
      * </p>
      *
      * @param enable true 启用推理，false 禁用（默认）
@@ -239,7 +237,8 @@ public final class DuoAgentBuilder {
     /**
      * 设置推理模式下的超时时间（仅在 enableReasoning=true 时生效）。
      * <p>
-     * 默认 5 分钟。
+     * 默认 5 分钟。推理模型（DeepSeek-R1 等）思考耗时长，
+     * 超过此时间仍未完成的调用将以 TIMEOUT 失败。
      * </p>
      *
      * @param timeout 超时时间
@@ -488,16 +487,24 @@ public final class DuoAgentBuilder {
 
     /**
      * 创建 LLM 适配器。
+     * <p>
+     * HTTP 层请求超时按应用层最大超时（llmTimeout / reasoningTimeout 的较大者）
+     * 加 1 分钟余量计算——必须始终大于应用层超时，否则会先于应用层 barrier
+     * 掐断 SSE 流式回复。
+     * </p>
      */
     private LlmAdapter createAdapter() {
+        var appTimeout = reasoningTimeout != null && reasoningTimeout.compareTo(timeout) > 0
+                ? reasoningTimeout : timeout;
+        var requestTimeout = appTimeout.plusMinutes(1);
         // apiFormat() 已在入口拒绝非 "openai" 值，此处只需单分支
         // 保留 switch 结构便于未来扩展其他格式
         return switch (apiFormat) {
-            case "openai" -> new DeepSeekAdapter(apiKey, baseUrl);
+            case "openai" -> new DeepSeekAdapter(apiKey, baseUrl, requestTimeout);
             // 未来支持 Anthropic
-            // case "anthropic" -> new AnthropicAdapter(apiKey, baseUrl);
+            // case "anthropic" -> new AnthropicAdapter(apiKey, baseUrl, requestTimeout);
             default -> throw new IllegalStateException(
-                    "内部错误：不支持的 API 格式 " + apiFormat + 
+                    "内部错误：不支持的 API 格式 " + apiFormat +
                     "（应该在 apiFormat() 调用时被拒绝）");
         };
     }

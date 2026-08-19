@@ -418,9 +418,14 @@ public class ReactLoopAgent implements Agent {
             public void onError(Throwable err) { errorRef.set(err); barrier.completeExceptionally(err); }
         });
 
-        var timeoutSeconds = options.getLlmTimeoutOrDefault().toSeconds();
+        // 推理模式（DeepSeek-R1 等）思考耗时长，应用 reasoningTimeout（默认 5 分钟）；
+        // 普通模式用 llmTimeout（默认 60 秒）。
+        // 用毫秒精度：toSeconds() 会把亚秒配置截断为 0 导致立即超时
+        var timeoutMillis = (options.isReasoningEnabled()
+                ? options.getReasoningTimeoutOrDefault()
+                : options.getLlmTimeoutOrDefault()).toMillis();
         try {
-            barrier.get(timeoutSeconds, TimeUnit.SECONDS);
+            barrier.get(timeoutMillis, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             closed.set(true);
@@ -430,8 +435,9 @@ public class ReactLoopAgent implements Agent {
             throw StepLlmException.of(errorRef.get() != null ? errorRef.get() : e.getCause());
         } catch (TimeoutException e) {
             closed.set(true);
+            var mode = options.isReasoningEnabled() ? "推理" : "LLM";
             throw new StepLlmException(
-                    new LlmFailure("LLM 调用超时（" + timeoutSeconds + "s）", "TIMEOUT"), e);
+                    new LlmFailure(mode + "调用超时（" + timeoutMillis + "ms）", "TIMEOUT"), e);
         }
         if (errorRef.get() != null) {
             closed.set(true);
