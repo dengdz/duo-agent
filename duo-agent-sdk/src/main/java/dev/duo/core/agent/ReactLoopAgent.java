@@ -535,11 +535,27 @@ public class ReactLoopAgent implements Agent {
 
     /** 解析 JSON 参数为嵌套结构；非法输入抛出 IllegalArgumentException。 */
     Map<String, Object> parseJsonArgs(String json) {
+        return parseJsonArgs(json, 0);
+    }
+
+    private Map<String, Object> parseJsonArgs(String json, int depth) {
         if (json == null || json.isBlank()) return Map.of();
         var parsed = dev.duo.util.JsonParser.parse(json);
         if (!(parsed instanceof Map<?, ?> m)) {
             throw new IllegalArgumentException("工具参数必须是 JSON 对象");
         }
+        
+        // 检测多重包装：{"arguments": "{...}"}
+        if (m.size() == 1 && m.containsKey("arguments") 
+                && m.get("arguments") instanceof String nested) {
+            var nextDepth = depth + 1;
+            logger.warn("检测到 {} 层嵌套 arguments 字符串，继续解析", nextDepth);
+            if (nextDepth > 5) {
+                throw new IllegalArgumentException("arguments 嵌套层数超过安全上限（5 层），请检查工具调用格式");
+            }
+            return parseJsonArgs(nested, nextDepth);
+        }
+        
         var result = new java.util.LinkedHashMap<String, Object>();
         for (var e : m.entrySet()) {
             result.put(String.valueOf(e.getKey()), e.getValue());

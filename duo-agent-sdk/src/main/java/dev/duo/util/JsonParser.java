@@ -95,6 +95,9 @@ public final class JsonParser {
             var c = s.charAt(pos++);
             if (c == '"') break;
             if (c == '\\') {
+                if (pos >= s.length()) {
+                    throw new IllegalArgumentException("字符串末尾的不完整转义序列");
+                }
                 var esc = s.charAt(pos++);
                 switch (esc) {
                     case '"' -> sb.append('"');
@@ -106,7 +109,10 @@ public final class JsonParser {
                     case 'r' -> sb.append('\r');
                     case 't' -> sb.append('\t');
                     case 'u' -> sb.append(parseUnicode());
-                    default -> throw new IllegalArgumentException("非法转义: \\" + esc);
+                    default -> {
+                        // 宽容模式：遇到非标准转义时保留反斜杠和后续字符原样
+                        sb.append('\\').append(esc);
+                    }
                 }
             } else {
                 sb.append(c);
