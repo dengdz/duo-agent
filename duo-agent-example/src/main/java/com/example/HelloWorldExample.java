@@ -32,6 +32,7 @@ public class HelloWorldExample {
                 .apiKey(apiKey)
                 .model("deepseek-chat")
                 .contextWindow(128000)
+                // deepseek-chat 非推理模型可限制输出；推理模型（deepseek-reasoner）建议不设置
                 .maxOutputTokens(4096)
                 .withFileTools()
                 .build();

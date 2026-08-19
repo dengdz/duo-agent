@@ -1,14 +1,15 @@
 # Duo Agent
 
-**零依赖的 Java AI Agent SDK**，让你用 6 行代码就能创建强大的 AI Agent。
+**零依赖的 Java AI Agent SDK**，让你用几行代码就能创建强大的 AI Agent。
 
 ## ✨ 特性
 
 - 🚀 **极简 API** - Builder 模式，开箱即用
 - 🔧 **内置工具链** - bash、文件操作、代码编辑、搜索等
 - 🔌 **零依赖** - 纯 Java 21，无第三方依赖
-- 🧪 **高质量** - 206 个单元测试，100% 工具链稳定性
+- 🧪 **高质量** - 213 个单元测试，100% 工具链稳定性
 - 🎯 **ReAct 架构** - 成熟的推理-行动循环模式
+- 🧠 **推理模式** - 支持 DeepSeek-R1 等深度推理模型
 
 ## 🚀 快速开始（5 分钟）
 
@@ -41,13 +42,15 @@ import dev.duo.api.DuoAgent;
 
 public class HelloWorld {
     public static void main(String[] args) {
-        // 3 行代码创建 Agent
         var agent = DuoAgent.builder()
-                .deepseek("deepseek-chat")
+                .apiFormat("openai")                              // API 格式
+                .baseUrl("https://api.deepseek.com")              // 基础 URL
+                .apiKey(System.getenv("DEEPSEEK_API_KEY"))        // API Key
+                .model("deepseek-chat")                           // 模型名称
+                .contextWindow(128000)                            // 上下文窗口（可选）
                 .withFileTools()
                 .build();
 
-        // 1 行代码开始对话
         String response = agent.chat("当前目录有哪些 Java 文件？");
         System.out.println(response);
     }
@@ -62,7 +65,10 @@ public class HelloWorld {
 
 ```java
 var agent = DuoAgent.builder()
-        .deepseek("deepseek-chat")
+        .apiFormat("openai")
+        .baseUrl("https://api.deepseek.com")
+        .apiKey(System.getenv("DEEPSEEK_API_KEY"))
+        .model("deepseek-chat")
         .withCodeTools()  // bash + file + grep + edit
         .systemPrompt("你是专业的 Java 代码助手")
         .build();
@@ -70,16 +76,39 @@ var agent = DuoAgent.builder()
 agent.chat("帮我重构 UserService.java 中的重复代码");
 ```
 
+### 推理模型 Agent（DeepSeek-R1）
+
+```java
+var agent = DuoAgent.builder()
+        .apiFormat("openai")
+        .baseUrl("https://api.deepseek.com")
+        .apiKey(System.getenv("DEEPSEEK_API_KEY"))
+        .model("deepseek-reasoner")
+        .contextWindow(64000)
+        .enableReasoning(true)      // 启用深度推理
+        .timeout(Duration.ofMinutes(5))  // 推理耗时较长，建议加大超时
+        .withCodeTools()
+        .build();
+```
+
+> **注意：** 推理模型建议不要设置 `maxOutputTokens`，由模型决定输出长度，
+> 避免 `<think>` 推理过程占用 token 导致回答被截断。
+
 ### 完整配置
 
 ```java
 var agent = DuoAgent.builder()
-        .deepseek("deepseek-v4-flash", "your-api-key")
-        .timeout(Duration.ofSeconds(120))
-        .maxTokens(8000)
+        .apiFormat("openai")                          // 必填：API 格式（目前仅支持 "openai"）
+        .baseUrl("https://api.deepseek.com")          // 必填：API 基础 URL
+        .apiKey("your-api-key")                       // 必填：API 密钥
+        .model("deepseek-chat")                       // 必填：模型名称
+        .contextWindow(128000)                        // 可选：上下文窗口
+        .maxOutputTokens(8000)                        // 可选：输出限制（默认不限制）
+        .enableReasoning(false)                       // 可选：推理模式（默认关闭）
+        .timeout(Duration.ofSeconds(120))             // 可选：LLM 超时（默认 60 秒）
         .systemPrompt("你是专业的代码审查助手")
-        .withCodeTools()  // 代码工具集
-        .tool(new CustomTool())  // 自定义工具
+        .withCodeTools()                              // 代码工具集
+        .tool(new CustomTool().getDefinition())       // 自定义工具
         .build();
 ```
 
@@ -89,6 +118,9 @@ var agent = DuoAgent.builder()
 CompletableFuture<String> future = agent.chatAsync("分析项目依赖");
 future.thenAccept(System.out::println);
 ```
+
+> **线程安全提示：** 同一 DuoAgent 实例共享底层 Session，不是线程安全的。
+> 如需并发处理多个请求，请为每个请求创建独立的 Agent 实例。
 
 ### 访问底层 API（高级用户）
 
@@ -106,8 +138,9 @@ Session session = agent.getSession();
 | `.withSearchTools()` | grep, glob | 内容搜索、文件查找 |
 | `.withEditTools()` | edit | 代码编辑 |
 | `.withCodeTools()` | bash + 以上所有 | 代码相关任务（推荐） |
-| `.withAllBuiltinTools()` | 全部内置工具 | 全能助手 |
+| `.withAllBuiltinTools()` | 全部内置工具（不含 skill） | 全能助手 |
 
+工具名称冲突时采用 last-wins 语义：后添加的工具定义覆盖先添加的。
 也可以手动添加工具：
 ```java
 .tool(new CustomTool().getDefinition())
@@ -119,7 +152,7 @@ Session session = agent.getSession();
 duo-agent/
 ├── duo-agent-sdk/          # SDK 核心模块
 │   ├── src/main/java/      # SDK 源码
-│   └── src/test/java/      # SDK 单元测试（206 个测试）
+│   └── src/test/java/      # SDK 单元测试（213 个测试）
 ├── duo-agent-example/      # 示例/调试模块
 │   └── src/main/java/      # 使用示例
 └── pom.xml                 # 父 POM
@@ -149,10 +182,13 @@ export DEEPSEEK_API_KEY=your_api_key
 ### 运行示例
 
 ```bash
-# HelloWorld 示例（最简单）
+# Builder API 示例（推荐，最简单）
 mvn exec:java -pl duo-agent-example -Dexec.mainClass="com.example.HelloWorldExample"
 
-# 基础示例（展示底层 API）
+# 底层 API 示例（手动组装组件）
+mvn exec:java -pl duo-agent-example -Dexec.mainClass="com.example.QuickStartExample"
+
+# 基础示例
 mvn exec:java -pl duo-agent-example -Dexec.mainClass="com.example.BasicAgentExample"
 
 # 工具调用示例
@@ -171,18 +207,21 @@ mvn exec:java -pl duo-agent-example -Dexec.mainClass="com.example.ToolCallingExa
 - 🎯 **Builder API** - 简化的创建接口（本次新增）
 
 **duo-agent-example** - 示例项目：
-- `HelloWorldExample.java` - 最简示例（6 行代码）
-- `BasicAgentExample.java` - 底层 API 演示
+- `HelloWorldExample.java` - Builder API 快速开始（推荐）
+- `QuickStartExample.java` - 底层 API 演示（手动组装组件）
+- `BasicAgentExample.java` - 基础示例
 - `ToolCallingExample.java` - 工具调用演示
-- `DeepSeekToolsDemo.java` - 稳定性测试（100% 成功率）
+- `DeepSeekToolsDemo.java` - 工具链稳定性测试
 
 ### API 对比
 
 **新 Builder API（推荐）：**
 ```java
-// 6 行代码
 var agent = DuoAgent.builder()
-    .deepseek("deepseek-chat")
+    .apiFormat("openai")
+    .baseUrl("https://api.deepseek.com")
+    .apiKey(System.getenv("DEEPSEEK_API_KEY"))
+    .model("deepseek-chat")
     .withFileTools()
     .build();
 String response = agent.chat("任务描述");
@@ -199,7 +238,7 @@ toolRegistry.register(new BashTool().getDefinition());
 var agent = new ReactLoopAgent(...);
 ```
 
-**代码量减少 90%！**
+**代码量减少 80%+！**
 
 ## 🧑‍💻 开发指南
 
@@ -218,7 +257,7 @@ var agent = new ReactLoopAgent(...);
 ### 运行单元测试
 
 ```bash
-# 运行全部测试（206 个）
+# 运行全部测试（213 个）
 mvn test
 
 # 运行 SDK 测试
@@ -252,14 +291,27 @@ public class MyTool implements ToolProvider {
 
 // 使用
 var agent = DuoAgent.builder()
-    .deepseek("deepseek-chat")
+    .apiFormat("openai")
+    .baseUrl("https://api.deepseek.com")
+    .apiKey(System.getenv("DEEPSEEK_API_KEY"))
+    .model("deepseek-chat")
     .tool(new MyTool().getDefinition())
     .build();
 ```
 
+## ⚠️ 已知限制
+
+- **chatStream() 未实现** - 当前调用会抛出 `UnsupportedOperationException`，
+  等待 DeepSeekAdapter SSE streaming 支持后开放
+- **Anthropic 格式未支持** - `apiFormat()` 目前仅接受 `"openai"`，
+  Anthropic 格式计划在未来版本支持
+- **reasoningTimeout 未生效** - 推理模式下的超时配置暂未应用到 LLM 调用，
+  如需更长超时请使用 `.timeout(Duration)`
+
 ## 📊 质量保证
 
-- ✅ **206 个单元测试** - 覆盖核心功能
+- ✅ **213 个单元测试** - 覆盖核心功能
+- ✅ **四轮 AI 代码审查** - 45 个问题全部修复
 - ✅ **100% 工具链稳定性** - 经过 DeepSeek API 实测验证
 - ✅ **零依赖** - 纯 Java 21，无第三方库
 - ✅ **阿里巴巴 Java 规范** - 全量修复高危违规项
