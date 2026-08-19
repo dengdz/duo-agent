@@ -37,7 +37,7 @@ class AgentHooksTest {
     void emptyHooksFallThroughToInnerBehavior() throws Exception {
         var hooks = AgentHooks.empty();
         var decision = hooks.dispatchPreStep(
-                new PreStepHook.PreStepContext(AGENT, 1, 1, List.of()),
+                new PreStepHook.PreStepContext(AGENT, 1, 1, List.of(), new dev.duo.core.session.Session(AGENT)),
                 () -> new PreStepDecision.Reject());
         assertTrue(decision instanceof PreStepDecision.Reject, "空链应直落内置行为");
     }
@@ -57,7 +57,7 @@ class AgentHooksTest {
                 .build();
 
         var decision = hooks.dispatchPreStep(
-                new PreStepHook.PreStepContext(AGENT, 1, 1, List.of()),
+                new PreStepHook.PreStepContext(AGENT, 1, 1, List.of(), new dev.duo.core.session.Session(AGENT)),
                 () -> {
                     order.add("builtin");
                     return new PreStepDecision.Reject();
@@ -79,7 +79,7 @@ class AgentHooksTest {
                 .build();
 
         var decision = hooks.dispatchPreStep(
-                new PreStepHook.PreStepContext(AGENT, 1, 1, List.of()),
+                new PreStepHook.PreStepContext(AGENT, 1, 1, List.of(), new dev.duo.core.session.Session(AGENT)),
                 () -> {
                     innerReached.incrementAndGet();
                     return new PreStepDecision.Reject();

@@ -39,3 +39,6 @@ build/
 .DS_Store
 /.workbuddy/
 sessions-demo/
+
+# API 密钥（严禁入库）
+.env

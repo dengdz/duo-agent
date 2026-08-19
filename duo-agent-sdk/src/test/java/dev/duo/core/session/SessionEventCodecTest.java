@@ -9,6 +9,8 @@ import dev.duo.model.llm.StreamChunk;
 import dev.duo.model.llm.TokenUsage;
 import dev.duo.model.session.SessionEventAssistantChunk;
 import dev.duo.model.session.SessionEventAssistantMessage;
+import dev.duo.model.session.SessionEventCompactionEnd;
+import dev.duo.model.session.SessionEventCompactionStart;
 import dev.duo.model.session.SessionEventRequestContext;
 import dev.duo.model.session.SessionEventRequestHeader;
 import dev.duo.model.session.SessionEventSessionEndSeed;
@@ -90,6 +92,12 @@ class SessionEventCodecTest {
                         "ToolError", "E_TOOL"),
                 new SessionEventRequestContext(4, 1724000000004L, false, null, null,
                         "deepseek", "deepseek-chat", null),
+                new SessionEventCompactionStart(5, 1724000000005L, false, null, null,
+                        "compact-1", 1),
+                new SessionEventCompactionEnd(6, 1724000000006L, false, null, null,
+                        "compact-1", 1, null),
+                new SessionEventCompactionEnd(7, 1724000000007L, false, null, null,
+                        "compact-2", 2, "摘要调用失败"),
                 new SessionEventRequestHeader(5, 1724000000005L, false, null, null,
                         new dev.duo.model.session.EpochHeader("deepseek", "deepseek-chat",
                                 "系统提示", null, null, null),

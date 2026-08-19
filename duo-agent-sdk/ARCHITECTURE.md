@@ -12,8 +12,9 @@ dev.duo
 │   └── llm/          # LLM 相关 API
 ├── core/             # 核心实现层（内部实现）
 │   ├── agent/        # Agent 实现
+│   ├── compaction/   # 压缩：估算/配对平衡/选区/压缩 hook（挂 PreStepHook）
 │   ├── llm/          # LLM 核心逻辑（含内置 LlmRetryHook）
-│   └── session/      # Session 管理
+│   └── session/      # Session 管理（含 JSONL 持久化/事件编解码/崩溃修复）
 ├── adapter/          # 适配器层（外部系统集成）
 │   └── deepseek/     # DeepSeek LLM 适配器（单次请求 + 结构化失败，重试走 hook）
 ├── tool/             # 工具层（Agent 可用的工具）
@@ -32,6 +33,11 @@ GenerateOptions）、`RequestErrorHook`（失败恢复决策，如重试）、`T
 （环绕工具执行，可实现审批/超时/审计）。链语义：先注册者在最外层，`chain.proceed()`
 委托下游（最终是循环内置行为），不调用即接管/否决，`proceed()` 仅可调用一次；
 hook 抛异常会传播并导致所在 step 失败（fail loud）。
+
+第一个纯外挂核心能力是 `core/compaction` 的 `CompactionHook`（压缩）：step 间压力
+触发（token 估算超阈值）→ 保尾选区（工具配对不拆散）→ 复用对话前缀的摘要调用 →
+`SurfaceOp.Replace` 把选中表面范围替换为摘要 checkpoint（原事件保留在日志，回放保真）；
+事务以 compaction/start 为持久锁、成败各落一条 compaction/end，失败不阻塞对话。
 
 ## 各层职责与扩展规范
 

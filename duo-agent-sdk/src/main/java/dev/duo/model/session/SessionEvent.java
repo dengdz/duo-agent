@@ -26,7 +26,9 @@ public sealed interface SessionEvent permits
         SessionEventSessionEndSeed,
         SessionEventUserMessage,
         SessionEventAssistantMessage,
-        SessionEventToolResult {
+        SessionEventToolResult,
+        SessionEventCompactionStart,
+        SessionEventCompactionEnd {
 
     /** 事件类型名称。 */
     String type();

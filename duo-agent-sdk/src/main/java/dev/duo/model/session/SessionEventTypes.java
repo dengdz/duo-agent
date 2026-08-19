@@ -24,6 +24,8 @@ public final class SessionEventTypes {
     public static final String REQUEST_HEADER = "request/header";
     public static final String REQUEST_CONTEXT = "request/context";
     public static final String SESSION_END_SEED = "session/end-seed";
+    public static final String COMPACTION_START = "compaction/start";
+    public static final String COMPACTION_END = "compaction/end";
 
     // ---- 表面事件 ----
     public static final String USER_MESSAGE = "user/message";

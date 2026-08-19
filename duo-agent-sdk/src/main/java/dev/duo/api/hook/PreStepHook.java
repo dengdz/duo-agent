@@ -1,6 +1,7 @@
 package dev.duo.api.hook;
 
 import dev.duo.api.agent.PreStepDecision;
+import dev.duo.core.session.Session;
 import dev.duo.model.llm.Message;
 import dev.duo.model.session.SessionId;
 
@@ -42,15 +43,18 @@ public interface PreStepHook {
         PreStepDecision proceed() throws Exception;
     }
 
-    /** pre-step 的不可变上下文。 */
+    /** pre-step 的不可变上下文（session 为库领域类型的明示豁免，见 SessionStore 先例）。 */
     record PreStepContext(
             SessionId agentId,
             int turn,
             int step,
-            List<Message.UserMessage> messages
+            List<Message.UserMessage> messages,
+            /** 所属会话：压缩等能力据此读取日志与表面。 */
+            Session session
     ) {
         public PreStepContext {
             messages = List.copyOf(messages);
+            session = java.util.Objects.requireNonNull(session, "session must not be null");
         }
     }
 }

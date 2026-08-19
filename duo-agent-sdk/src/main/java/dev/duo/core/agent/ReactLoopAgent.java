@@ -259,7 +259,7 @@ public class ReactLoopAgent implements Agent {
                 PreStepDecision decision;
                 try {
                     decision = hooks.dispatchPreStep(
-                            new PreStepHook.PreStepContext(id, turn, step, entering),
+                            new PreStepHook.PreStepContext(id, turn, step, entering, session),
                             () -> new PreStepDecision.Enter(entering));
                 } catch (Exception e) {
                     throw new AgentLoopException("pre-step hook 失败", e);

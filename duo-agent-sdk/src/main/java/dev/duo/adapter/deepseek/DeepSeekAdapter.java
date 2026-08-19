@@ -43,10 +43,21 @@ public class DeepSeekAdapter extends LlmAdapter {
     private final String baseUrl;
     private final String apiKey;
 
+    /** 从 DEEPSEEK_API_KEY 环境变量读取密钥的便捷构造。 */
     public DeepSeekAdapter() {
+        this(System.getenv(API_KEY_ENV), getEnvOrDefault("DEEPSEEK_BASE_URL", DEFAULT_BASE_URL));
+    }
+
+    /**
+     * 显式指定密钥的构造（编程接入优先使用；密钥只经内存传递，不做日志输出）。
+     *
+     * @param apiKey DeepSeek API 密钥
+     * @param baseUrl API 基地址（传 null 用官方默认）
+     */
+    public DeepSeekAdapter(String apiKey, String baseUrl) {
+        this.apiKey = apiKey == null || apiKey.isBlank() ? null : apiKey;
+        this.baseUrl = baseUrl == null || baseUrl.isBlank() ? DEFAULT_BASE_URL : baseUrl;
         this.httpClient = HttpClient.newBuilder().connectTimeout(DEFAULT_TIMEOUT).build();
-        this.baseUrl = getEnvOrDefault("DEEPSEEK_BASE_URL", DEFAULT_BASE_URL);
-        this.apiKey = System.getenv(API_KEY_ENV);
     }
 
     @Override

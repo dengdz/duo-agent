@@ -12,6 +12,8 @@ import dev.duo.model.session.EpochHeader;
 import dev.duo.model.session.SessionEvent;
 import dev.duo.model.session.SessionEventAssistantChunk;
 import dev.duo.model.session.SessionEventAssistantMessage;
+import dev.duo.model.session.SessionEventCompactionEnd;
+import dev.duo.model.session.SessionEventCompactionStart;
 import dev.duo.model.session.SessionEventRequestContext;
 import dev.duo.model.session.SessionEventRequestHeader;
 import dev.duo.model.session.SessionEventSessionEndSeed;
@@ -142,6 +144,15 @@ public final class SessionEventCodec {
                 num(sb, "contextWindow", t.contextWindow());
             }
             case SessionEventSessionEndSeed t -> { /* 仅公共头 */ }
+            case SessionEventCompactionStart t -> {
+                str(sb, "compactionId", t.compactionId());
+                num(sb, "turn", t.turn());
+            }
+            case SessionEventCompactionEnd t -> {
+                str(sb, "compactionId", t.compactionId());
+                num(sb, "turn", t.turn());
+                str(sb, "error", t.error());
+            }
             case SessionEventUserMessage t -> raw(sb, "message", encodeMessage(t.message()));
             case SessionEventAssistantMessage t -> {
                 num(sb, "turn", t.turn());
@@ -194,6 +205,10 @@ public final class SessionEventCodec {
             case SessionEventTypes.REQUEST_CONTEXT -> new SessionEventRequestContext(seq, time, ignorable, surfaceOp, seqs,
                     rStr(m, "provider"), rStr(m, "model"), optInt(m, "contextWindow"));
             case SessionEventTypes.SESSION_END_SEED -> new SessionEventSessionEndSeed(seq, time, ignorable, surfaceOp, seqs);
+            case SessionEventTypes.COMPACTION_START -> new SessionEventCompactionStart(seq, time, ignorable,
+                    surfaceOp, seqs, rStr(m, "compactionId"), optInt(m, "turn"));
+            case SessionEventTypes.COMPACTION_END -> new SessionEventCompactionEnd(seq, time, ignorable,
+                    surfaceOp, seqs, rStr(m, "compactionId"), optInt(m, "turn"), rStr(m, "error"));
             case SessionEventTypes.USER_MESSAGE -> new SessionEventUserMessage(seq, time, ignorable, surfaceOp, seqs,
                     (Message.UserMessage) decodeMessage(asMap(m.get("message"), "message")));
             case SessionEventTypes.ASSISTANT_MESSAGE -> new SessionEventAssistantMessage(seq, time, ignorable, surfaceOp, seqs,
