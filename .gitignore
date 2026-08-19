@@ -42,3 +42,8 @@ sessions-demo/
 
 # API 密钥（严禁入库）
 .env
+
+# 运行时日志（严禁入库）
+logs/
+# ZCode 会话文件
+.zcode/

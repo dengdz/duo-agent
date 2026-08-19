@@ -22,38 +22,38 @@ import org.slf4j.LoggerFactory;
 class DeepSeekSseParser {
 
     private static final Logger logger = LoggerFactory.getLogger(DeepSeekSseParser.class);
-    
+
     // SSE 协议常量
     private static final String SSE_DATA_PREFIX = "data: ";
     private static final String SSE_DONE_MARKER = "[DONE]";
-    
+
     // JSON 常量
     private static final String JSON_NULL_STRING = "null";
-    
+
     // 块索引常量
     private static final int TEXT_BLOCK_INDEX = 0;
     private static final int TOOL_CALL_BLOCK_INDEX = 1;
 
     // ---- 流式解析状态（每次 reset() 后重置）----
-    
+
     /** 是否是第一个文本块（用于判断是否需要发送 BlockStart）。*/
     private boolean firstChunk = true;
-    
+
     /** 是否包含工具调用（用于切换文本块到工具调用块）。*/
     private boolean hasToolCalls = false;
-    
+
     /** 工具调用块是否已开始（避免重复发送 BlockStart）。*/
     private boolean toolCallBlockStarted = false;
-    
+
     /** 当前工具调用的 ID。*/
     private String currentToolCallId;
-    
+
     /** 当前工具调用的名称。*/
     private String currentToolCallName;
-    
+
     /** 当前工具调用的参数累积缓冲区。*/
     private final StringBuilder currentToolCallArgs = new StringBuilder();
-    
+
     /** 文本内容累积缓冲区。*/
     private final StringBuilder textBuffer = new StringBuilder();
 
@@ -67,12 +67,12 @@ class DeepSeekSseParser {
         if (!line.startsWith(SSE_DATA_PREFIX)) {
             return;
         }
-        
+
         var data = line.substring(SSE_DATA_PREFIX.length()).trim();
         if (SSE_DONE_MARKER.equals(data) || data.isEmpty()) {
             return;
         }
-        
+
         parseChunk(data, callback);
     }
 
@@ -180,7 +180,7 @@ class DeepSeekSseParser {
         } else if (!firstChunk) {
             callback.onChunk(new StreamChunk.BlockEnd(TEXT_BLOCK_INDEX, new ContentBlock.Text(textBuffer.toString())));
         }
-        
+
         callback.onChunk(new StreamChunk.Finish(toFinishReason(finish)));
     }
 

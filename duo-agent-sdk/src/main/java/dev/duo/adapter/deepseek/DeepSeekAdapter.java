@@ -75,6 +75,7 @@ public class DeepSeekAdapter extends LlmAdapter {
 
         try {
             var requestBody = DeepSeekRequestBuilder.buildRequest(options);
+            logger.debug("DeepSeek API 请求体:\n{}", requestBody);
             var request = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl + "/chat/completions"))
                     .header("Authorization", "Bearer " + apiKey)
@@ -87,9 +88,9 @@ public class DeepSeekAdapter extends LlmAdapter {
             httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofLines())
                     .thenAccept(response -> {
                         if (response.statusCode() != HTTP_OK) {
-                            var body = response.body().collect(Collectors.joining());
-                            logger.error("DeepSeek API returned {} for model {}",
-                                    response.statusCode(), options.model());
+                            var body = response.body().collect(Collectors.joining("\n"));
+                            logger.error("DeepSeek API returned {} for model {}\n响应体: {}",
+                                    response.statusCode(), options.model(), body);
                             callback.onError(new LlmException(String.format(
                                     "DeepSeek API 返回 %d (model: %s): %s",
                                     response.statusCode(), options.model(), body),

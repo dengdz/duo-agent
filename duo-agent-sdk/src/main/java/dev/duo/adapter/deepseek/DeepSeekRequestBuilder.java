@@ -31,7 +31,7 @@ class DeepSeekRequestBuilder {
      */
     static String buildRequest(GenerateOptions options) {
         // 预估容量：基础结构 ~200 字符 + system ~1000 + 每条消息 ~500 + 每个工具 ~300
-        var estimatedCapacity = 200 
+        var estimatedCapacity = 200
                 + (options.system() != null ? options.system().length() : 0)
                 + options.messages().size() * 500
                 + (options.tools() != null ? options.tools().size() * 300 : 0);
@@ -39,7 +39,6 @@ class DeepSeekRequestBuilder {
         sb.append("{\n");
         sb.append("  \"model\": \"").append(escapeJson(options.model())).append("\",\n");
         sb.append("  \"stream\": true,\n");
-        sb.append("  \"stream_options\": {\"include_usage\": true},\n");
         sb.append("  \"messages\": [\n");
 
         var messages = new ArrayList<String>();
@@ -60,8 +59,32 @@ class DeepSeekRequestBuilder {
                 }
                 case Message.AssistantMessage asstMsg -> {
                     var text = flattenText(asstMsg.content());
-                    messages.add("      {\"role\": \"assistant\", \"content\": \""
-                            + escapeJson(text) + "\"}");
+                    var toolCalls = extractToolCalls(asstMsg.content());
+
+                    if (!toolCalls.isEmpty()) {
+                        // 有工具调用时，序列化为 tool_calls 格式
+                        var toolCallsJson = new StringBuilder("[");
+                        var first = true;
+                        for (var tc : toolCalls) {
+                            if (!first) {
+                                toolCallsJson.append(", ");
+                            }
+                            first = false;
+                            toolCallsJson.append("{\"id\": \"").append(escapeJson(tc.id().value()))
+                                    .append("\", \"type\": \"function\", \"function\": {\"name\": \"")
+                                    .append(escapeJson(tc.name()))
+                                    .append("\", \"arguments\": \"")
+                                    .append(escapeJson(tc.arguments()))
+                                    .append("\"}}");
+                        }
+                        toolCallsJson.append("]");
+                        messages.add("      {\"role\": \"assistant\", \"content\": \""
+                                + escapeJson(text) + "\", \"tool_calls\": " + toolCallsJson + "}");
+                    } else {
+                        // 无工具调用，只有文本内容
+                        messages.add("      {\"role\": \"assistant\", \"content\": \""
+                                + escapeJson(text) + "\"}");
+                    }
                 }
                 case Message.ToolResultMessage toolMsg -> {
                     if (!toolMsg.content().isEmpty()
@@ -116,6 +139,16 @@ class DeepSeekRequestBuilder {
             if (block instanceof ContentBlock.Text t) sb.append(t.text());
         }
         return sb.toString();
+    }
+
+    private static List<ContentBlock.ToolCall> extractToolCalls(List<ContentBlock> blocks) {
+        var toolCalls = new ArrayList<ContentBlock.ToolCall>();
+        for (var block : blocks) {
+            if (block instanceof ContentBlock.ToolCall tc) {
+                toolCalls.add(tc);
+            }
+        }
+        return toolCalls;
     }
 
     private static String escapeJson(String s) {
