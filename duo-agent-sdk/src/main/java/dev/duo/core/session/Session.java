@@ -14,9 +14,13 @@ import dev.duo.model.session.SessionEventTypes;
 import dev.duo.model.session.SessionEventUserMessage;
 import dev.duo.model.session.SessionHeader;
 import dev.duo.model.session.SessionId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 /**
  * 事件溯源的会话：一个 {@link SessionEvent} 的追加式日志。
@@ -33,6 +37,8 @@ import java.util.List;
  */
 public class Session {
 
+    private static final Logger logger = LoggerFactory.getLogger(Session.class);
+
     /** 追加式事件日志。 */
     private final List<SessionEvent> log = new ArrayList<>();
 
@@ -47,6 +53,9 @@ public class Session {
 
     /** 事件快照缓存。 */
     private List<SessionEvent> eventsSnapshot;
+
+    /** 追加监听器；持久化等外部投影据此订阅事件流（对应 TS 的 session/event 广播）。 */
+    private final List<Consumer<SessionEvent>> appendListeners = new CopyOnWriteArrayList<>();
 
     // ---- requestHeader 折叠 ----
     private EpochHeader headerFold;
@@ -64,6 +73,24 @@ public class Session {
      * @param header 可选的存储元数据
      */
     public Session(SessionId id, SessionEvent[] seed, SessionHeader header) {
+        this(id, seed, header, null);
+    }
+
+    /**
+     * 带初始追加监听器的种子构造：监听先于构造期的 session/end-seed 边界事件注册，
+     * 保证从恢复的第一条事件起就不遗漏（持久化接线的正确入口）。
+     *
+     * @param id 会话标识
+     * @param seed 可选的重放或 fork 种子事件
+     * @param header 可选的存储元数据
+     * @param initialListener 构造期即生效的追加监听器；null 表示无
+     */
+    public Session(SessionId id, SessionEvent[] seed, SessionHeader header,
+                   Consumer<SessionEvent> initialListener) {
+        if (initialListener != null) {
+            appendListeners.add(initialListener);
+        }
+
         // 处理种子事件
         if (seed != null && seed.length > 0) {
             for (int i = 0; i < seed.length; i++) {
@@ -141,6 +168,18 @@ public class Session {
     // ---- append ----
 
     /**
+     * 注册追加监听器：此后每次 {@link #append} 成功后回调。
+     * <p>监听器异常会被捕获并记录（不阻断日志与后续监听器），适合观察型投影。</p>
+     *
+     * @param listener 事件回调
+     * @return 注销器
+     */
+    public AutoCloseable onAppend(java.util.function.Consumer<SessionEvent> listener) {
+        appendListeners.add(listener);
+        return () -> appendListeners.remove(listener);
+    }
+
+    /**
      * 追加一个已构造好的事件到日志。
      * @param event 要追加的事件（必须已设置好 seq、time 等字段）
      * @return 追加的事件
@@ -151,7 +190,19 @@ public class Session {
         log.add(event);
         eventsSnapshot = null;
         surfaceManager.accept(event);
+        notifyAppend(event);
         return event;
+    }
+
+    /** 通知监听器；单个监听器失败记录后继续，不得破坏事实源。 */
+    private void notifyAppend(SessionEvent event) {
+        for (var listener : appendListeners) {
+            try {
+                listener.accept(event);
+            } catch (RuntimeException e) {
+                logger.warn("Append listener failed on event {}: {}", event.type(), e.getMessage(), e);
+            }
+        }
     }
 
     /**
