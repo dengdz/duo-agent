@@ -66,7 +66,7 @@ dev.duo/
 
 采用语义化版本 `MAJOR.MINOR.PATCH[-QUALIFIER]`：
 
-- **0.1.0-SNAPSHOT**：当前开发版本
+- **0.1.0**：当前开发版本
 - **0.1.0**：第一个正式版本
 - **0.2.0**：添加新功能（向后兼容）
 - **1.0.0**：API 稳定版本
@@ -131,7 +131,7 @@ mvn clean install
 <dependency>
     <groupId>dev.duo</groupId>
     <artifactId>duo-agent-sdk</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
 </dependency>
 ```
 

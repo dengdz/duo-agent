@@ -20,13 +20,13 @@
 <dependency>
     <groupId>dev.duo</groupId>
     <artifactId>duo-agent-sdk</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
 </dependency>
 ```
 
 **Gradle:**
 ```gradle
-implementation 'dev.duo:duo-agent-sdk:0.1.0-SNAPSHOT'
+implementation 'dev.duo:duo-agent-sdk:0.1.0'
 ```
 
 ### 2. 设置 API Key
@@ -591,6 +591,7 @@ Apache License 2.0
 
 ## 📚 更多文档
 
+- **[完整文档站](docs/index.md)** - 入门 / 指南 / 高级 / 架构 / 参考，19 篇成体系文档
 - [SDK 设计文档](SDK_DESIGN.md) - 架构设计与实现细节
 - [SDK API 文档](duo-agent-sdk/README.md) - 底层 API 参考
 - [开发交接文档](HANDOFF.md) - 开发历史与决策记录

@@ -59,7 +59,7 @@ mvn exec:java -Dexec.mainClass="com.example.ToolCallingExample"
 <dependency>
     <groupId>dev.duo</groupId>
     <artifactId>duo-agent-sdk</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
 </dependency>
 ```
 

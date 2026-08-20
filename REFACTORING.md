@@ -35,15 +35,15 @@ duo-agent/                          # 父项目（多模块）
 ### SDK 模块
 ```bash
 duo-agent-sdk/target/
-├── duo-agent-sdk-0.1.0-SNAPSHOT.jar          # 主 JAR（170KB）
-├── duo-agent-sdk-0.1.0-SNAPSHOT-sources.jar  # 源码 JAR（79KB）
-└── duo-agent-sdk-0.1.0-SNAPSHOT-javadoc.jar  # 文档 JAR（872KB）
+├── duo-agent-sdk-0.1.0.jar          # 主 JAR（170KB）
+├── duo-agent-sdk-0.1.0-sources.jar  # 源码 JAR（79KB）
+└── duo-agent-sdk-0.1.0-javadoc.jar  # 文档 JAR（872KB）
 ```
 
 ### Example 模块
 ```bash
 duo-agent-example/target/
-└── duo-agent-example-0.1.0-SNAPSHOT.jar      # 可执行 JAR（包含所有依赖）
+└── duo-agent-example-0.1.0.jar      # 可执行 JAR（包含所有依赖）
 ```
 
 ## 模块依赖关系
@@ -69,7 +69,7 @@ mvn clean install
 ```
 
 **输出：**
-- SDK 安装到本地 Maven 仓库：`~/.m2/repository/dev/duo/duo-agent-sdk/0.1.0-SNAPSHOT/`
+- SDK 安装到本地 Maven 仓库：`~/.m2/repository/dev/duo/duo-agent-sdk/0.1.0/`
 - Example 也会安装（但通常只用于开发调试）
 
 ### 2. 只构建 SDK
@@ -90,7 +90,7 @@ cd duo-agent-example
 mvn exec:java -Dexec.mainClass="com.example.BasicAgentExample"
 
 # 或直接运行可执行 JAR
-java -jar target/duo-agent-example-0.1.0-SNAPSHOT.jar
+java -jar target/duo-agent-example-0.1.0.jar
 ```
 
 ### 4. 在其他项目中使用 SDK
@@ -114,7 +114,7 @@ java -jar target/duo-agent-example-0.1.0-SNAPSHOT.jar
         <dependency>
             <groupId>dev.duo</groupId>
             <artifactId>duo-agent-sdk</artifactId>
-            <version>0.1.0-SNAPSHOT</version>
+            <version>0.1.0</version>
         </dependency>
         
         <!-- 日志实现 -->
