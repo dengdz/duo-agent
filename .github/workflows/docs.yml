@@ -30,13 +30,16 @@ jobs:
           cache: npm
           cache-dependency-path: website/package-lock.json
 
+      - name: Copy docs to website
+        run: cp -r docs website/docs
+
       - name: Install dependencies
         working-directory: website
         run: npm install
 
       - name: Build docs site
         working-directory: website
-        run: npx vitepress build
+        run: npm run build
 
       - uses: actions/upload-pages-artifact@v3
         with:
