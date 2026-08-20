@@ -31,7 +31,9 @@ jobs:
           cache-dependency-path: website/package-lock.json
 
       - name: Copy docs to website
-        run: cp -r docs website/docs
+        run: |
+          rm -rf website/docs
+          cp -r docs website/
 
       - name: Install dependencies
         working-directory: website

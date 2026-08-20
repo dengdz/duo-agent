@@ -9,6 +9,7 @@ export default defineConfig({
   description: '零依赖的 Java 21 AI Agent SDK',
   lang: 'zh-CN',
   base,
+  srcDir: 'docs',
   // docs/ 中存在指向仓库根的相对链接（../README.md、../duo-agent-example/...），
   // 网站上无对应路由：放行死链检查（GitHub 上仍可正常点击）
   ignoreDeadLinks: true,
