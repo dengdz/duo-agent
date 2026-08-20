@@ -2,9 +2,7 @@ package dev.duo.api;
 
 import dev.duo.api.agent.AgentHooks;
 import dev.duo.api.agent.AgentOptions;
-import dev.duo.api.llm.LlmAdapter;
 import dev.duo.api.llm.LlmRuntime;
-import dev.duo.adapter.deepseek.DeepSeekAdapter;
 import dev.duo.core.DuoAgentImpl;
 import dev.duo.core.agent.ReactLoopAgent;
 import dev.duo.core.llm.SystemPromptImpl;
@@ -25,34 +23,37 @@ import java.util.UUID;
 /**
  * Duo Agent 构建器 - 使用 Fluent API 创建 Agent。
  * <p>
- * 这是创建 Agent 的推荐方式，提供了清晰的配置接口和智能默认值。
+ * 模型配置（凭证、端点、上下文窗口等）由 {@link DuoModel} 承担并在
+ * Agent 间复用，Builder 只负责 Agent 专属配置（系统提示词、超时、工具、Hook）。
  * </p>
  * <p>
  * <b>基础示例：</b>
  * <pre>{@code
- * var agent = DuoAgent.builder()
- *     .apiFormat("openai")
- *     .baseUrl("https://api.deepseek.com")
+ * DuoModel model = DeepSeekModel.builder()
  *     .apiKey(System.getenv("DEEPSEEK_API_KEY"))
  *     .model("deepseek-chat")
  *     .contextWindow(128000)
- *     .maxOutputTokens(4096)
- *     .withFileTools()
+ *     .build();
+ *
+ * DuoAgent agent = DuoAgent.builder()
+ *     .model(model)
+ *     .withCodeTools()
  *     .build();
  * }</pre>
  * </p>
  * <p>
  * <b>推理模型示例：</b>
  * <pre>{@code
- * var agent = DuoAgent.builder()
- *     .apiFormat("openai")
- *     .baseUrl("https://api.deepseek.com")
+ * DuoModel reasoner = DeepSeekModel.builder()
  *     .apiKey(System.getenv("DEEPSEEK_API_KEY"))
  *     .model("deepseek-reasoner")
  *     .contextWindow(64000)
- *     .maxOutputTokens(8000)
- *     .enableReasoning(true)  // 开启推理
+ *     .enableReasoning(true)
  *     .reasoningTimeout(Duration.ofMinutes(5))
+ *     .build();
+ *
+ * DuoAgent agent = DuoAgent.builder()
+ *     .model(reasoner)
  *     .withCodeTools()
  *     .build();
  * }</pre>
@@ -65,24 +66,16 @@ public final class DuoAgentBuilder {
 
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(DuoAgentBuilder.class);
 
-    // LLM 配置
-    private String apiFormat;
-    private String model;
-    private String apiKey;
-    private String baseUrl;
+    /** systemPrompt 均未设置时的兜底文案（优先级：Agent 显式 > Model > 本默认）。 */
+    private static final String DEFAULT_SYSTEM_PROMPT = "你是一个智能助手，可以使用工具帮助用户完成任务。";
 
-    // 上下文和输出配置
-    private Integer contextWindow;
-    // 默认 null，由模型决定输出长度，避免截断推理模型
-    private Integer maxOutputTokens;
-
-    // 推理配置
-    private Boolean reasoningEnabled = false;
-    private Duration reasoningTimeout = Duration.ofMinutes(5);
+    // 模型配置（必填）
+    private DuoModel model;
 
     // Agent 配置
     private Duration timeout = Duration.ofSeconds(60);
-    private String systemPrompt = "你是一个智能助手，可以使用工具帮助用户完成任务。";
+    /** null 表示未显式设置，build() 时按优先级解析（见 DEFAULT_SYSTEM_PROMPT 注释）。 */
+    private String systemPrompt;
 
     // 工具和 Hook
     private final List<ToolDefinition> tools = new ArrayList<>();
@@ -94,171 +87,29 @@ public final class DuoAgentBuilder {
     DuoAgentBuilder() {
     }
 
-    // ==================== LLM 基础配置 ====================
+    // ==================== 模型配置 ====================
 
     /**
-     * 设置 API 格式。
+     * 设置模型（必填）。
      * <p>
-     * 目前支持：
-     * <ul>
-     *   <li>"openai" - OpenAI API 格式（DeepSeek, Ollama, vLLM 等兼容）</li>
-     * </ul>
-     * <p>
-     * 注意：Anthropic 格式暂未实现，请勿使用。
+     * 同一 Model 实例可传给多个 Agent，共享模型配置；每个 Agent 经
+     * {@link DuoModel#createAdapter(Duration)} 获得独立的适配器实例。
      * </p>
      *
-     * @param format API 格式
-     * @return this
-     * @throws IllegalArgumentException 如果格式不支持
-     */
-    public DuoAgentBuilder apiFormat(String format) {
-        Objects.requireNonNull(format, "apiFormat 不能为 null");
-        // 在入口就拒绝不支持的格式，避免到 build() 才失败
-        if (!"openai".equals(format)) {
-            throw new IllegalArgumentException(
-                    "不支持的 API 格式: " + format + "。目前仅支持 'openai'。" +
-                    "Anthropic 格式计划在未来版本支持。"
-            );
-        }
-        this.apiFormat = format;
-        return this;
-    }
-
-    /**
-     * 设置模型名称。
-     *
-     * @param model 模型名称，如 "deepseek-chat", "gpt-4", "claude-3-5-sonnet-20241022"
+     * @param model 模型实例
      * @return this
      */
-    public DuoAgentBuilder model(String model) {
+    public DuoAgentBuilder model(DuoModel model) {
         this.model = Objects.requireNonNull(model, "model 不能为 null");
-        return this;
-    }
-
-    /**
-     * 设置 API Key。
-     *
-     * @param apiKey API 密钥
-     * @return this
-     */
-    public DuoAgentBuilder apiKey(String apiKey) {
-        this.apiKey = apiKey;
-        return this;
-    }
-
-    /**
-     * 设置 API 基础 URL。
-     * <p>
-     * 示例：
-     * <ul>
-     *   <li>DeepSeek: https://api.deepseek.com</li>
-     *   <li>Ollama: http://localhost:11434/v1</li>
-     * </ul>
-     * </p>
-     * <p>
-     * 注意：Claude/Anthropic 格式暂未实现，请勿使用。
-     * </p>
-     *
-     * @param baseUrl 基础 URL
-     * @return this
-     */
-    public DuoAgentBuilder baseUrl(String baseUrl) {
-        this.baseUrl = baseUrl;
-        return this;
-    }
-
-    // ==================== 上下文和输出配置 ====================
-
-    /**
-     * 设置模型的上下文窗口大小（输入 + 输出的总 token 数）。
-     * <p>
-     * 示例：
-     * <ul>
-     *   <li>deepseek-chat: 128000</li>
-     *   <li>gpt-4: 128000</li>
-     *   <li>claude-3-5-sonnet: 200000</li>
-     * </ul>
-     * </p>
-     *
-     * @param tokens 上下文窗口大小
-     * @return this
-     */
-    public DuoAgentBuilder contextWindow(int tokens) {
-        if (tokens <= 0) {
-            throw new IllegalArgumentException("contextWindow 必须大于 0");
-        }
-        this.contextWindow = tokens;
-        return this;
-    }
-
-    /**
-     * 设置单次响应的最大输出 token 数。
-     * <p>
-     * 对应 LLM API 的 max_tokens 参数。
-     * </p>
-     * <p>
-     * 默认不设置，由模型决定输出长度，避免截断推理模型（如 DeepSeek-R1）的长输出。
-     * 仅在需要明确限制时才调用此方法。
-     * </p>
-     *
-     * @param tokens 最大输出 token 数
-     * @return this
-     */
-    public DuoAgentBuilder maxOutputTokens(int tokens) {
-        if (tokens <= 0) {
-            throw new IllegalArgumentException("maxOutputTokens 必须大于 0");
-        }
-        this.maxOutputTokens = tokens;
-        return this;
-    }
-
-    // ==================== 推理配置 ====================
-
-    /**
-     * 启用模型的深度推理能力（如 DeepSeek-R1, OpenAI O1）。
-     * <p>
-     * 启用后：
-     * <ul>
-     *   <li>响应可能包含 &lt;think&gt; 推理过程</li>
-     *   <li>LLM 调用超时自动切换为 {@link #reasoningTimeout(Duration)}
-     *       （默认 5 分钟，普通模式为 60 秒）</li>
-     *   <li>需要模型本身支持此特性（如 deepseek-reasoner）</li>
-     * </ul>
-     * </p>
-     *
-     * @param enable true 启用推理，false 禁用（默认）
-     * @return this
-     */
-    public DuoAgentBuilder enableReasoning(boolean enable) {
-        this.reasoningEnabled = enable;
-        return this;
-    }
-
-    /**
-     * 设置推理模式下的超时时间（仅在 enableReasoning=true 时生效）。
-     * <p>
-     * 默认 5 分钟。推理模型（DeepSeek-R1 等）思考耗时长，
-     * 超过此时间仍未完成的调用将以 TIMEOUT 失败。
-     * </p>
-     *
-     * @param timeout 超时时间
-     * @return this
-     */
-    public DuoAgentBuilder reasoningTimeout(Duration timeout) {
-        Objects.requireNonNull(timeout, "reasoningTimeout 不能为 null");
-        if (timeout.isZero() || timeout.isNegative()) {
-            throw new IllegalArgumentException("reasoningTimeout 必须大于 0");
-        }
-        this.reasoningTimeout = timeout;
         return this;
     }
 
     // ==================== Agent 配置 ====================
 
     /**
-     * 设置超时时间。
+     * 设置 LLM 调用超时时间。
      * <p>
-     * 默认 60 秒。
+     * 默认 60 秒。启用推理的 Model 使用其自身的 reasoningTimeout（默认 5 分钟）。
      * </p>
      *
      * @param timeout 超时时长
@@ -274,9 +125,11 @@ public final class DuoAgentBuilder {
     }
 
     /**
-     * 设置系统提示词。
+     * 设置系统提示词（可选）。
      * <p>
-     * 默认为通用助手提示词。
+     * <b>优先级：Agent 显式 systemPrompt &gt; Model systemPrompt &gt; 内置默认。</b>
+     * 本 Builder 不设默认文案，未显式调用时回落到 Model 的 systemPrompt，
+     * 两者均未设置才使用内置默认——避免内置文案静默覆盖 Model 的角色设定。
      * </p>
      *
      * @param systemPrompt 系统提示词
@@ -412,22 +265,36 @@ public final class DuoAgentBuilder {
     /**
      * 构建 DuoAgent 实例。
      * <p>
-     * 在调用此方法前，必须配置：apiFormat, model, apiKey, baseUrl。
+     * 在调用此方法前，必须通过 {@link #model(DuoModel)} 设置模型。
      * </p>
      *
      * @return 配置完成的 DuoAgent 实例
-     * @throws IllegalStateException 如果配置不完整或无效
+     * @throws IllegalStateException 如果未设置 Model
      */
     public DuoAgent build() {
-        validateConfig();
+        if (model == null) {
+            throw new IllegalStateException(
+                    "未设置 Model。请调用 .model(DuoModel) 方法（如 DeepSeekModel.builder().build()）。"
+            );
+        }
 
-        // 1. 创建 LLM Runtime
+        // 1. 解析 systemPrompt：Agent 显式 > Model > 内置默认
+        var resolvedPrompt = this.systemPrompt != null
+                ? this.systemPrompt
+                : Objects.requireNonNullElse(model.getSystemPrompt(), DEFAULT_SYSTEM_PROMPT);
+
+        // 2. 创建 LLM Runtime。HTTP 兜底超时按应用层最大超时（Agent llmTimeout
+        //    与推理模式下 Model reasoningTimeout 的较大者）加 1 分钟余量计算——
+        //    必须始终大于应用层超时，否则会先于应用层 barrier 掐断 SSE 流式回复。
+        //    该约束只能在组装时刻计算（Model 不知道 Agent 的 llmTimeout），
+        //    因此必须走带参工厂而非 Model 自用的无参工厂
+        var reasoningBound = model.isReasoningEnabled() ? model.getReasoningTimeout() : Duration.ZERO;
+        var appTimeout = this.timeout.compareTo(reasoningBound) > 0
+                ? this.timeout : reasoningBound;
         var llmRuntime = new LlmRuntime();
-        var adapter = createAdapter();
-        // 使用 apiFormat 作为 provider 名称
-        llmRuntime.registerAdapter(apiFormat, adapter);
+        llmRuntime.registerAdapter(model.getApiFormat(), model.createAdapter(appTimeout.plusMinutes(1)));
 
-        // 2. 创建工具注册表（按工具名去重）
+        // 3. 创建工具注册表（按工具名去重）
         // 使用 last-wins 语义，显式添加的工具覆盖 preset
         var toolMap = new java.util.LinkedHashMap<String, ToolDefinition>();
         for (var tool : tools) {
@@ -437,12 +304,12 @@ public final class DuoAgentBuilder {
             }
         }
         var uniqueTools = new java.util.ArrayList<>(toolMap.values());
-        
+
         var toolRegistry = new ToolRegistryImpl();
         uniqueTools.forEach(toolRegistry::register);
 
-        // 3. 创建 System Prompt（使用去重后的工具列表）
-        var systemPromptImpl = new SystemPromptImpl(systemPrompt, false);
+        // 4. 创建 System Prompt（使用去重后的工具列表）
+        var systemPromptImpl = new SystemPromptImpl(resolvedPrompt, false);
         systemPromptImpl.tools(assembly ->
                 new ToolProviderResult(
                         uniqueTools.stream()
@@ -451,24 +318,24 @@ public final class DuoAgentBuilder {
                 )
         );
 
-        // 4. 创建 Session
+        // 5. 创建 Session
         var sessionId = new SessionId("session-" + UUID.randomUUID().toString());
         var session = new Session(sessionId);
 
-        // 5. 创建 Agent Options
+        // 6. 创建 Agent Options
         var agentOptions = new AgentOptions(
-                apiFormat,           // API 格式
-                apiFormat,           // provider（使用 apiFormat）
-                model,               // 模型名称
-                contextWindow,       // 上下文窗口
-                maxOutputTokens,     // 最大输出 token
-                reasoningEnabled,    // 是否启用推理
-                reasoningTimeout,    // 推理超时
-                timeout,             // 普通超时
-                hooksBuilder.build() // Hooks
+                model.getApiFormat(),     // API 格式
+                model.getApiFormat(),     // provider（路由键与 API 格式一致）
+                model.getModelName(),     // 模型名称
+                model.getContextWindow(), // 上下文窗口
+                model.getMaxOutputTokens(),    // 最大输出 token
+                model.isReasoningEnabled(),    // 是否启用推理
+                model.getReasoningTimeout(),   // 推理超时
+                timeout,                 // 普通超时
+                hooksBuilder.build()     // Hooks
         );
 
-        // 6. 创建底层 Agent
+        // 7. 创建底层 Agent
         var agentId = new SessionId("agent-" + UUID.randomUUID().toString());
         var agent = new ReactLoopAgent(
                 agentId,
@@ -479,63 +346,7 @@ public final class DuoAgentBuilder {
                 toolRegistry
         );
 
-        // 7. 返回包装后的 DuoAgent
+        // 8. 返回包装后的 DuoAgent
         return new DuoAgentImpl(agent, session);
-    }
-
-    // ==================== 私有辅助方法 ====================
-
-    /**
-     * 创建 LLM 适配器。
-     * <p>
-     * HTTP 层请求超时按应用层最大超时（llmTimeout / reasoningTimeout 的较大者）
-     * 加 1 分钟余量计算——必须始终大于应用层超时，否则会先于应用层 barrier
-     * 掐断 SSE 流式回复。
-     * </p>
-     */
-    private LlmAdapter createAdapter() {
-        var appTimeout = reasoningTimeout != null && reasoningTimeout.compareTo(timeout) > 0
-                ? reasoningTimeout : timeout;
-        var requestTimeout = appTimeout.plusMinutes(1);
-        // apiFormat() 已在入口拒绝非 "openai" 值，此处只需单分支
-        // 保留 switch 结构便于未来扩展其他格式
-        return switch (apiFormat) {
-            case "openai" -> new DeepSeekAdapter(apiKey, baseUrl, requestTimeout);
-            // 未来支持 Anthropic
-            // case "anthropic" -> new AnthropicAdapter(apiKey, baseUrl, requestTimeout);
-            default -> throw new IllegalStateException(
-                    "内部错误：不支持的 API 格式 " + apiFormat +
-                    "（应该在 apiFormat() 调用时被拒绝）");
-        };
-    }
-
-    /**
-     * 验证配置完整性。
-     */
-    private void validateConfig() {
-        if (apiFormat == null || apiFormat.isBlank()) {
-            // 只提示支持的格式
-            throw new IllegalStateException(
-                    "未配置 API 格式。请调用 .apiFormat(\"openai\") 方法。"
-            );
-        }
-
-        if (model == null || model.isBlank()) {
-            throw new IllegalStateException(
-                    "未配置模型名称。请调用 .model(\"模型名称\") 方法。"
-            );
-        }
-
-        if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalStateException(
-                    "未设置 API Key。请调用 .apiKey(\"your-api-key\") 方法。"
-            );
-        }
-
-        if (baseUrl == null || baseUrl.isBlank()) {
-            throw new IllegalStateException(
-                    "未设置 API Base URL。请调用 .baseUrl(\"https://api.example.com\") 方法。"
-            );
-        }
     }
 }

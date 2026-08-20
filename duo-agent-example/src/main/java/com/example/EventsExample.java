@@ -1,6 +1,8 @@
 package com.example;
 
 import dev.duo.api.DuoAgent;
+import dev.duo.api.DuoModel;
+import dev.duo.model.deepseek.DeepSeekModel;
 import dev.duo.model.llm.ContentBlock;
 import dev.duo.model.llm.StreamChunk;
 import dev.duo.model.session.SessionEvent;
@@ -21,9 +23,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * 多事件流演示 - 完整观察 Agent 的工作过程。
+ * 完整事件流演示 - 完整观察 Agent 的工作过程。
  * <p>
- * chatEvents() 全量透传 session 事件（对齐 DSH 的 session/event 订阅模式）：
+ * stream() 全量透传 session 事件（对齐 DSH 的 session/event 订阅模式）：
  * 思考推理、文本增量、工具调用与结果、step/turn 边界全部可见，
  * 适合渲染 IDE Agent 式的工作过程界面。
  * </p>
@@ -34,29 +36,30 @@ import java.util.concurrent.atomic.AtomicReference;
 public class EventsExample {
 
     public static void main(String[] args) throws InterruptedException {
-        var apiKey = System.getenv("DEEPSEEK_API_KEY");
+        var apiKey = EnvLoader.get("DEEPSEEK_API_KEY");
         if (apiKey == null || apiKey.isBlank()) {
-            System.err.println("❌ 错误：未设置 DEEPSEEK_API_KEY 环境变量");
+            System.err.println("❌ 错误：未设置 DEEPSEEK_API_KEY");
             System.exit(1);
         }
 
-        var agent = DuoAgent.builder()
-                .apiFormat("openai")
-                .baseUrl("https://api.deepseek.com")
+        DuoModel model = DeepSeekModel.builder()
                 .apiKey(apiKey)
                 .model("deepseek-chat")
                 .contextWindow(128000)
+                .build();
+        var agent = DuoAgent.builder()
+                .model(model)
                 .withCodeTools()  // bash + file + grep + glob + edit，触发工具调用事件
                 .build();
 
-        System.out.println("=== chatEvents() 多事件流演示 ===");
+        System.out.println("=== stream() 完整事件流演示 ===");
         System.out.println("（完整观察：step 边界 → 文本/思考增量 → 工具调用 → 工具结果 → turn 结束）\n");
 
         var done = new CountDownLatch(1);
         var error = new AtomicReference<Throwable>();
         var subscriptionRef = new AtomicReference<Flow.Subscription>();
 
-        agent.chatEvents("列出当前目录下所有的 Java 文件名，并统计一共有多少个。")
+        agent.stream("列出当前目录下所有的 Java 文件名，并统计一共有多少个。")
                 .subscribe(new Flow.Subscriber<SessionEvent>() {
                     @Override
                     public void onSubscribe(Flow.Subscription s) {

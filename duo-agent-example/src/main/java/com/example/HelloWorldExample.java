@@ -1,11 +1,14 @@
 package com.example;
 
 import dev.duo.api.DuoAgent;
+import dev.duo.api.DuoModel;
+import dev.duo.model.deepseek.DeepSeekModel;
 
 /**
  * HelloWorld 示例 - 展示 duo-agent 最简化用法。
  * <p>
- * 这是使用 Builder API 的最简单示例，使用新的 API 格式配置。
+ * 两步式用法：先用 DeepSeekModel 封装模型配置（可复用），
+ * 再交给 DuoAgent.builder() 组装会话与工具。
  * </p>
  *
  * @author zhangyl
@@ -16,28 +19,34 @@ public class HelloWorldExample {
     public static void main(String[] args) {
         System.out.println("=== Duo Agent - HelloWorld 示例 ===\n");
 
-        // 获取 API Key（必须从环境变量读取）
-        var apiKey = System.getenv("DEEPSEEK_API_KEY");
+        // 获取 API Key（优先环境变量，其次 .env 文件）
+        var apiKey = EnvLoader.get("DEEPSEEK_API_KEY");
         if (apiKey == null || apiKey.isBlank()) {
-            System.err.println("❌ 错误：未设置 DEEPSEEK_API_KEY 环境变量");
-            System.err.println("   请设置环境变量后重试：");
-            System.err.println("   export DEEPSEEK_API_KEY=your_api_key\n");
+            System.err.println("❌ 错误：未设置 DEEPSEEK_API_KEY");
+            System.err.println("   方式 1：在项目根目录创建 .env 文件");
+            System.err.println("           DEEPSEEK_API_KEY=your_api_key");
+            System.err.println("   方式 2：设置环境变量");
+            System.err.println("           export DEEPSEEK_API_KEY=your_api_key\n");
             System.exit(1);
         }
 
         // ==================== 核心代码（新 API）====================
-        var agent = DuoAgent.builder()
-                .apiFormat("openai")  // DeepSeek 使用 OpenAI 兼容格式
-                .baseUrl("https://api.deepseek.com")
-                .apiKey(apiKey)
+        // 1. 模型配置：同一 Model 可传给多个 Agent 复用
+        DuoModel model = DeepSeekModel.builder()
+                .apiKey(apiKey)                  // baseUrl 默认官方端点
                 .model("deepseek-chat")
                 .contextWindow(128000)
                 // deepseek-chat 非推理模型可限制输出；推理模型（deepseek-reasoner）建议不设置
                 .maxOutputTokens(4096)
+                .build();
+
+        // 2. Agent：只配置会话与工具，模型配置不再重复填写
+        var agent = DuoAgent.builder()
+                .model(model)
                 .withFileTools()
                 .build();
 
-        String response = agent.chat("你好，请介绍一下自己。");
+        String response = agent.call("你好，请介绍一下自己。");
         System.out.println(response);
         // ========================================================
 

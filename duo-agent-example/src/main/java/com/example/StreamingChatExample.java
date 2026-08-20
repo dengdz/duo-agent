@@ -1,16 +1,22 @@
 package com.example;
 
 import dev.duo.api.DuoAgent;
+import dev.duo.api.DuoModel;
+import dev.duo.model.deepseek.DeepSeekModel;
+import dev.duo.model.llm.StreamChunk;
+import dev.duo.model.session.SessionEvent;
+import dev.duo.model.session.SessionEventAssistantChunk;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 流式输出演示 - 直观感受 stream() 响应式流的逐字到达效果。
+ * 流式输出演示 - 直观感受 stream() 事件流的逐字到达效果。
  * <p>
  * 订阅 {@link Flow.Publisher}（JDK 原生 Reactive Streams），
- * 文字实时逐段打印（而非等全部生成完一次性输出），结束时统计增量数量与耗时。
+ * stream() 返回完整 session 事件流，本例过滤出文本增量实时逐段打印
+ * （而非等全部生成完一次性输出），结束时统计增量数量与耗时。
  * Spring WebFlux 用户可用 {@code Flux.from(agent.stream(...))} 一行桥接。
  * </p>
  *
@@ -20,19 +26,20 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class StreamingChatExample {
 
     public static void main(String[] args) throws InterruptedException {
-        var apiKey = System.getenv("DEEPSEEK_API_KEY");
+        var apiKey = EnvLoader.get("DEEPSEEK_API_KEY");
         if (apiKey == null || apiKey.isBlank()) {
-            System.err.println("❌ 错误：未设置 DEEPSEEK_API_KEY 环境变量");
+            System.err.println("❌ 错误：未设置 DEEPSEEK_API_KEY");
             System.err.println("   IntelliJ 中可在 Run Configuration → Environment variables 里设置");
             System.exit(1);
         }
 
-        var agent = DuoAgent.builder()
-                .apiFormat("openai")
-                .baseUrl("https://api.deepseek.com")
+        DuoModel model = DeepSeekModel.builder()
                 .apiKey(apiKey)
                 .model("deepseek-chat")
                 .contextWindow(128000)
+                .build();
+        var agent = DuoAgent.builder()
+                .model(model)
                 .build();
 
         System.out.println("=== stream() 流式输出演示 ===");
@@ -43,9 +50,9 @@ public class StreamingChatExample {
         var chunkCount = new AtomicInteger();
         var done = new CountDownLatch(1);
 
-        // 冷发布者：subscribe 时才发起对话
+        // 冷发布者：subscribe 时才发起对话；只要文本增量时按 instanceof 过滤
         agent.stream("用 3 段话介绍一下 Java 虚拟机的内存模型，每段 100 字左右。")
-                .subscribe(new Flow.Subscriber<String>() {
+                .subscribe(new Flow.Subscriber<SessionEvent>() {
                     private Flow.Subscription subscription;
 
                     @Override
@@ -55,10 +62,13 @@ public class StreamingChatExample {
                     }
 
                     @Override
-                    public void onNext(String chunk) {
-                        chunkCount.incrementAndGet();
-                        // 不换行直接打印，肉眼可见逐字到达
-                        System.out.print(chunk);
+                    public void onNext(SessionEvent event) {
+                        if (event instanceof SessionEventAssistantChunk c
+                                && c.chunk() instanceof StreamChunk.TextDelta d) {
+                            chunkCount.incrementAndGet();
+                            // 不换行直接打印，肉眼可见逐字到达
+                            System.out.print(d.text());
+                        }
                     }
 
                     @Override

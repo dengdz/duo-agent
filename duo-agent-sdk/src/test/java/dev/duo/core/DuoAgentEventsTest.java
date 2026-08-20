@@ -34,10 +34,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * {@link DuoAgentImpl#chatEvents(String)} 多事件流的测试。
+ * {@link DuoAgentImpl#stream(String)} 完整事件流的测试。
  * <p>
- * 验证：完整事件序列、工具往返事件、思考过程可见（对比 stream 的过滤）、
- * sourceEventSeqs 回链、seq 单调递增、冷启动与单订阅约束。
+ * 验证：完整事件序列、工具往返事件、思考过程可见、
+ * sourceEventSeqs 回链、seq 单调递增、冷启动、单订阅与取消约束。
  * </p>
  *
  * @author zhangyl
@@ -113,7 +113,7 @@ class DuoAgentEventsTest {
                 ScriptedStreamAdapter.textReply("Hello")), session);
 
         var subscriber = new EventsSubscriber();
-        agent.chatEvents("hi").subscribe(subscriber);
+        agent.stream("hi").subscribe(subscriber);
         subscriber.awaitEnd();
 
         assertNull(subscriber.error.get(), "正常对话不应出错");
@@ -171,7 +171,7 @@ class DuoAgentEventsTest {
         var duo = new DuoAgentImpl(agent, session);
 
         var subscriber = new EventsSubscriber();
-        duo.chatEvents("echo hi").subscribe(subscriber);
+        duo.stream("echo hi").subscribe(subscriber);
         subscriber.awaitEnd();
 
         var types = typeNames(subscriber.received);
@@ -189,8 +189,8 @@ class DuoAgentEventsTest {
     }
 
     @Test
-    void shouldExposeReasoningDeltasUnlikStream() {
-        // 同一脚本：chatEvents 应收到 ReasoningDelta，stream() 应过滤掉
+    void shouldExposeReasoningDeltas() {
+        // stream 全量透传：ReasoningDelta 应作为 assistant/chunk 事件可见
         var script = new ArrayList<StreamChunk>();
         script.add(new StreamChunk.BlockStart(0, SessionEventTypes.BLOCK_REASONING));
         script.add(new StreamChunk.ReasoningDelta(0, "thinking..."));
@@ -205,7 +205,7 @@ class DuoAgentEventsTest {
         var agent = newAgent(new ScriptedStreamAdapter(script), session);
 
         var subscriber = new EventsSubscriber();
-        agent.chatEvents("hi").subscribe(subscriber);
+        agent.stream("hi").subscribe(subscriber);
         subscriber.awaitEnd();
 
         var reasoningDeltas = subscriber.received.stream()
@@ -213,7 +213,7 @@ class DuoAgentEventsTest {
                         && c.chunk() instanceof StreamChunk.ReasoningDelta)
                 .toList();
         assertEquals(1, reasoningDeltas.size(),
-                "chatEvents 应透传 ReasoningDelta（思考过程可见）");
+                "stream 应透传 ReasoningDelta（思考过程可见）");
     }
 
     @Test
@@ -223,7 +223,7 @@ class DuoAgentEventsTest {
                 ScriptedStreamAdapter.textReply("Hello", " ", "World")), session);
 
         var subscriber = new EventsSubscriber();
-        agent.chatEvents("hi").subscribe(subscriber);
+        agent.stream("hi").subscribe(subscriber);
         subscriber.awaitEnd();
 
         var message = subscriber.received.stream()
@@ -247,7 +247,7 @@ class DuoAgentEventsTest {
                 ScriptedStreamAdapter.textReply("Hello")), session);
 
         var subscriber = new EventsSubscriber();
-        agent.chatEvents("hi").subscribe(subscriber);
+        agent.stream("hi").subscribe(subscriber);
         subscriber.awaitEnd();
 
         int lastSeq = -1;
@@ -264,7 +264,7 @@ class DuoAgentEventsTest {
         var agent = newAgent(new ScriptedStreamAdapter(
                 ScriptedStreamAdapter.textReply("Hello")), session);
 
-        var publisher = agent.chatEvents("hi");
+        var publisher = agent.stream("hi");
         assertEquals(0, session.events().size(), "未订阅时不应有任何对话活动");
 
         var first = new EventsSubscriber();
@@ -285,8 +285,8 @@ class DuoAgentEventsTest {
         var agent = newAgent(new ScriptedStreamAdapter(
                 ScriptedStreamAdapter.textReply("ok")), session);
 
-        assertThrows(IllegalArgumentException.class, () -> agent.chatEvents(" "));
-        assertThrows(IllegalArgumentException.class, () -> agent.chatEvents(null));
+        assertThrows(IllegalArgumentException.class, () -> agent.stream(" "));
+        assertThrows(IllegalArgumentException.class, () -> agent.stream(null));
     }
 
     @Test
@@ -304,7 +304,7 @@ class DuoAgentEventsTest {
         var received = new CopyOnWriteArrayList<SessionEvent>();
         var finished = new CountDownLatch(1);
         var error = new AtomicReference<Throwable>();
-        agent.chatEvents("hi").subscribe(new Flow.Subscriber<>() {
+        agent.stream("hi").subscribe(new Flow.Subscriber<>() {
             @Override
             public void onSubscribe(Flow.Subscription s) {
                 s.request(1);
@@ -339,5 +339,47 @@ class DuoAgentEventsTest {
                 "错误消息应说明缓冲溢出，实际: " + error.get().getMessage());
         assertTrue(received.size() < 100,
                 "慢订阅者只消费了 request 的量，实际: " + received.size());
+    }
+
+    @Test
+    void shouldStopPushingAfterCancel() throws Exception {
+        var session = new Session(new SessionId("cancel-events-test"));
+        var agent = newAgent(new ScriptedStreamAdapter(
+                ScriptedStreamAdapter.textReply("Hello", " ", "World")), session);
+
+        var received = new CopyOnWriteArrayList<SessionEvent>();
+        var subscribed = new CountDownLatch(1);
+        agent.stream("hi").subscribe(new Flow.Subscriber<>() {
+            private Flow.Subscription subscription;
+
+            @Override
+            public void onSubscribe(Flow.Subscription s) {
+                subscription = s;
+                s.request(Long.MAX_VALUE);
+                // 首个事件尚未到达即取消：之后不应再收到 onNext
+                subscription.cancel();
+                subscribed.countDown();
+            }
+
+            @Override
+            public void onNext(SessionEvent event) {
+                received.add(event);
+            }
+
+            @Override
+            public void onError(Throwable t) {
+                // 取消后错误也不应到达
+            }
+
+            @Override
+            public void onComplete() {
+                // 取消后完成信号不应到达
+            }
+        });
+        assertTrue(subscribed.await(5, TimeUnit.SECONDS));
+        // 给驱动线程时间跑完对话轮（取消语义：停止推送，但对话继续执行完毕）
+        Thread.sleep(300);
+
+        assertTrue(received.isEmpty(), "cancel 后不应再收到任何 onNext");
     }
 }

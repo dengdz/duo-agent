@@ -58,7 +58,7 @@ class ReasoningTimeoutTest {
                 null));
 
         long start = System.currentTimeMillis();
-        String reply = agent.chat("需要深思的问题");
+        String reply = agent.call("需要深思的问题");
         long elapsed = System.currentTimeMillis() - start;
 
         assertEquals(SLOW_REPLY, reply, "思考延迟超过 llmTimeout 但在 reasoningTimeout 内，应成功");
@@ -78,11 +78,11 @@ class ReasoningTimeoutTest {
 
         long start = System.currentTimeMillis();
         var thrown = assertThrows(IllegalStateException.class,
-                () -> agent.chat("普通问题"));
+                () -> agent.call("普通问题"));
         long elapsed = System.currentTimeMillis() - start;
 
         assertTrue(thrown.getMessage().contains("未生成新的响应"),
-                "超时失败应体现为 chat 的失败异常，实际: " + thrown.getMessage());
+                "超时失败应体现为 call 的失败异常，实际: " + thrown.getMessage());
         assertTrue(elapsed < THINKING_DELAY_MS + 2000,
                 "应在 llmTimeout 附近快速失败而非等完思考延迟，耗时: " + elapsed + "ms");
     }

@@ -2,24 +2,17 @@ package dev.duo.core;
 
 import dev.duo.api.DuoAgent;
 import dev.duo.api.agent.Agent;
+import dev.duo.core.flow.BufferedPublisher;
 import dev.duo.core.session.Session;
 import dev.duo.model.llm.ContentBlock;
 import dev.duo.model.llm.Message;
 import dev.duo.model.llm.MessageFactory;
 import dev.duo.model.llm.MessageSource;
-import dev.duo.model.llm.StreamChunk;
 import dev.duo.model.session.SessionEvent;
-import dev.duo.model.session.SessionEventAssistantChunk;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Flow;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Function;
 
 /**
  * DuoAgent 接口的默认实现。
@@ -50,7 +43,7 @@ public final class DuoAgentImpl implements DuoAgent {
     }
 
     @Override
-    public String chat(String message) {
+    public String call(String message) {
         if (message == null || message.isBlank()) {
             throw new IllegalArgumentException("消息内容不能为空");
         }
@@ -90,213 +83,27 @@ public final class DuoAgentImpl implements DuoAgent {
     }
 
     @Override
-    public CompletableFuture<String> chatAsync(String message) {
-        // 使用 commonPool 执行阻塞 I/O 不是最佳实践，但对于简化 API 可以接受
-        // 生产环境建议使用自定义线程池
-        return CompletableFuture.supplyAsync(() -> chat(message));
-    }
-
-    @Override
-    public Flow.Publisher<String> stream(String message) {
+    public Flow.Publisher<SessionEvent> stream(String message) {
         if (message == null || message.isBlank()) {
             throw new IllegalArgumentException("消息内容不能为空");
         }
-        // 仅投影文本增量：ReasoningDelta 是思考过程、ToolCallDelta 是 JSON 参数碎片（见 chatEvents）
-        return new ChatStreamPublisher<>(message, event -> {
-            if (event instanceof SessionEventAssistantChunk chunkEvent
-                    && chunkEvent.chunk() instanceof StreamChunk.TextDelta delta) {
-                return delta.text();
+        // 冷发布者：session 事件广播全量透传（对应 DSH 的 session/event 订阅模式）。
+        // 流式真源是 session 事件广播——adapter 的每个增量已由 ReactLoopAgent
+        // 逐 chunk 写入 session，这里订阅广播并透传给订阅者；对话轮由 call() 驱动，
+        // 驱动线程正常返回即补发完成信号、抛出异常即转为失败信号
+        return new BufferedPublisher<>("duo-agent-stream", emitter -> {
+            AutoCloseable unsubscriber = session.onAppend(emitter::emit);
+            try {
+                call(message);
+                emitter.complete();
+            } finally {
+                try {
+                    unsubscriber.close();
+                } catch (Exception ignored) {
+                    // 取消订阅失败不影响主流程
+                }
             }
-            return null;
         });
-    }
-
-    @Override
-    public Flow.Publisher<SessionEvent> chatEvents(String message) {
-        if (message == null || message.isBlank()) {
-            throw new IllegalArgumentException("消息内容不能为空");
-        }
-        // 恒等透传：session 事件全量推送给订阅者（对应 DSH 的 session/event 订阅模式）
-        return new ChatStreamPublisher<>(message, event -> event);
-    }
-
-    /**
-     * 冷发布者：subscribe 时才在虚拟线程上驱动 {@link #chat(String)}，
-     * 流式真源是 session 事件广播——adapter 的每个增量已由 ReactLoopAgent
-     * 逐 chunk 写入 session，这里订阅广播并经投影器转换：
-     * {@link #stream(String)} 只取文本增量，{@link #chatEvents(String)} 全量透传。
-     *
-     * @param <T> 推送给订阅者的元素类型（String 或 SessionEvent）
-     */
-    private final class ChatStreamPublisher<T> implements Flow.Publisher<T> {
-
-        private final String message;
-        /** 事件投影器：返回 null 表示该事件不推送给订阅者。 */
-        private final Function<SessionEvent, T> projector;
-        private final AtomicBoolean subscribedOnce = new AtomicBoolean();
-
-        ChatStreamPublisher(String message, Function<SessionEvent, T> projector) {
-            this.message = message;
-            this.projector = projector;
-        }
-
-        @Override
-        public void subscribe(Flow.Subscriber<? super T> subscriber) {
-            Objects.requireNonNull(subscriber, "subscriber 不能为 null");
-            // 单订阅：重复订阅无法共享同一次对话轮
-            if (!subscribedOnce.compareAndSet(false, true)) {
-                subscriber.onSubscribe(new Flow.Subscription() {
-                    @Override
-                    public void request(long n) {
-                        // no-op：即将进入终态
-                    }
-
-                    @Override
-                    public void cancel() {
-                        // no-op
-                    }
-                });
-                subscriber.onError(new IllegalStateException(
-                        "stream()/chatEvents() 返回的 Publisher 仅支持订阅一次，请重新调用"));
-                return;
-            }
-            new ChatStreamSubscription(subscriber).start();
-        }
-
-        /** 单个订阅的状态机：缓冲 + 背压 + 终态信号。 */
-        private final class ChatStreamSubscription implements Flow.Subscription {
-
-            /** 完成哨兵（正常终态）。 */
-            private static final Object TERMINAL = new Object();
-
-            /**
-             * 内部缓冲上限：订阅者不消费（不 request）时，最多缓存这么多事件，
-             * 溢出即以 onError 终止订阅——防止 chatEvents() 全事件透传下
-             * （推理模型思考痕迹可达数千 chunk）慢消费者导致整轮事件驻留内存。
-             */
-            private static final int MAX_BUFFERED_ITEMS = 8192;
-
-            private final Flow.Subscriber<? super T> subscriber;
-            /** 元素为投影结果（T）、TERMINAL（完成）或 StreamError（失败）；有界，防慢消费者内存放大。 */
-            private final BlockingQueue<Object> buffer = new LinkedBlockingQueue<>(MAX_BUFFERED_ITEMS);
-            private final AtomicLong demand = new AtomicLong();
-            private final AtomicBoolean cancelled = new AtomicBoolean();
-            /** 终态（onComplete/onError）是否已发出，保证恰好一次。 */
-            private volatile boolean terminated;
-
-            ChatStreamSubscription(Flow.Subscriber<? super T> subscriber) {
-                this.subscriber = subscriber;
-            }
-
-            void start() {
-                subscriber.onSubscribe(this);
-                // 虚拟线程驱动对话轮（与 ReactLoopAgent 内部驱动方式一致）
-                Thread.ofVirtual().name("duo-chat-stream").start(() -> {
-                    AutoCloseable unsubscriber = session.onAppend(event -> {
-                        var item = projector.apply(event);
-                        if (item != null) {
-                            emit(item);
-                        }
-                    });
-                    try {
-                        chat(message);
-                        emit(TERMINAL);
-                    } catch (Throwable error) {
-                        emit(new StreamError(error));
-                    } finally {
-                        try {
-                            unsubscriber.close();
-                        } catch (Exception ignored) {
-                            // 取消订阅失败不影响主流程
-                        }
-                    }
-                });
-            }
-
-            private void emit(Object item) {
-                if (cancelled.get()) {
-                    return;
-                }
-                // 慢消费者缓冲溢出：终止订阅（对话轮继续执行完毕，仅停止推送）
-                if (!buffer.offer(item)) {
-                    cancelled.set(true);
-                    synchronized (this) {
-                        if (!terminated) {
-                            terminated = true;
-                            subscriber.onError(new IllegalStateException(
-                                    "订阅者消费过慢：内部缓冲达到上限 " + MAX_BUFFERED_ITEMS
-                                            + " 个事件，订阅已终止（请增大 request 批量或及时消费）"));
-                        }
-                        buffer.clear();
-                    }
-                    return;
-                }
-                drain();
-            }
-
-            /** 串行派发：synchronized 保证 onNext/onComplete/onError 不重入、不并发。 */
-            private void drain() {
-                synchronized (this) {
-                    if (terminated || cancelled.get()) {
-                        buffer.clear();
-                        return;
-                    }
-                    while (true) {
-                        var item = demand.get() > 0 ? buffer.poll() : peekTerminal();
-                        if (item == null) {
-                            return;
-                        }
-                        if (item == TERMINAL) {
-                            terminated = true;
-                            subscriber.onComplete();
-                            return;
-                        }
-                        if (item instanceof StreamError error) {
-                            terminated = true;
-                            subscriber.onError(error.cause());
-                            return;
-                        }
-                        demand.decrementAndGet();
-                        @SuppressWarnings("unchecked")
-                        T typedItem = (T) item;
-                        subscriber.onNext(typedItem);
-                    }
-                }
-            }
-
-            /** 无 demand 时终态信号（完成/错误）不受背压限制，仍需立即派发（Reactive Streams 3.5 精神）。 */
-            private Object peekTerminal() {
-                var head = buffer.peek();
-                return head == TERMINAL || head instanceof StreamError ? buffer.poll() : null;
-            }
-
-            @Override
-            public void request(long n) {
-                if (n <= 0) {
-                    // Reactive Streams 规范 3.9：非正数 request 是协议违规
-                    subscriber.onError(new IllegalArgumentException(
-                            "request 参数必须为正数（Reactive Streams 3.9），当前: " + n));
-                    cancel();
-                    return;
-                }
-                // 溢出时饱和为 Long.MAX_VALUE（视为无限需求）
-                demand.accumulateAndGet(n, (current, add) ->
-                        current > Long.MAX_VALUE - add ? Long.MAX_VALUE : current + add);
-                drain();
-            }
-
-            @Override
-            public void cancel() {
-                cancelled.set(true);
-                synchronized (this) {
-                    buffer.clear();
-                }
-            }
-        }
-    }
-
-    /** 流内失败信号载体。 */
-    private record StreamError(Throwable cause) {
     }
 
     @Override
@@ -347,15 +154,15 @@ public final class DuoAgentImpl implements DuoAgent {
                 textParts.add(textBlock.text());
             }
         }
-        
+
         // 空提取时抛异常（纯 ToolCall 或 Reasoning 响应）
         if (textParts.isEmpty()) {
             throw new IllegalStateException(
                     "Assistant 消息不包含文本内容（可能是纯 ToolCall 或 Reasoning 响应）。" +
-                    "当前 chat() API 仅支持提取文本响应。"
+                    "当前 call() API 仅支持提取文本响应。"
             );
         }
-        
+
         // 多个 Text block 用换行分隔，避免单词边界合并
         return String.join("\n", textParts);
     }
