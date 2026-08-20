@@ -6,7 +6,7 @@
 
 ```java
 var builder = DuoAgent.builder()
-        /* ...基础配置... */;
+        .model(model);                    // 必填：模型配置在 DuoModel 上（如 DeepSeekModel）
 
 builder.hooks().addRequestErrorHook(new LlmRetryHook());   // 显式启用重试
 
@@ -42,8 +42,8 @@ ReactLoopAgent 对每个 step 有 **10 次重试的硬上限**（防止 Hook 配
 
 重试过程在日志中留痕（`Agent ... 请求失败（...），第 N 次重试`），最终失败：
 
-- `chat()` → `IllegalStateException`
-- `chatEvents()` → `turn/end` 事件 `reason=Error(LlmFailure)`，含结构化错误码
+- `call()` → `IllegalStateException`
+- `stream()` → `turn/end` 事件 `reason=Error(LlmFailure)`，含结构化错误码
 
 ## 什么不值得重试
 

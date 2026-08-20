@@ -6,13 +6,11 @@ duo-agent 是一个**零依赖的 Java 21 AI Agent SDK**。它让你用极少的
 
 ### 🚀 极简门面 API
 
-Builder 模式 + 四种对话模式，从"3 行代码跑起来"到"完整观测 Agent 工作过程"逐级递进：
+Builder 模式 + 两种对话模式，从"3 行代码跑起来"到"完整观测 Agent 工作过程"逐级递进：
 
 ```java
-agent.chat("问题");                          // 同步：阻塞等待完整回答
-agent.chatAsync("问题");                      // 异步：CompletableFuture
-agent.stream("问题");                         // 流式：Flow.Publisher<String> 文本增量
-agent.chatEvents("问题");                     // 事件流：完整 Agent 工作过程
+agent.call("问题");                           // 同步：阻塞等待完整回答
+agent.stream("问题");                         // 事件流：Flow.Publisher<SessionEvent> 全量事件透传
 ```
 
 ### 🔧 开箱即用的工具链
@@ -21,13 +19,14 @@ agent.chatEvents("问题");                     // 事件流：完整 Agent 工�
 
 ```java
 DuoAgent.builder()
+        .model(model)      // DuoModel 实例（必填）
         .withCodeTools()   // bash + file_read + file_write + grep + glob + edit
         ...
 ```
 
 ### 📡 真流式、可观测
 
-底层 SSE 全链路流式：模型的每一个 token 增量、每一次工具调用、每一步推理决策都以事件形式记录并实时可订阅——`chatEvents()` 让你像看 IDE Agent 一样看到完整工作过程。
+底层 SSE 全链路流式：模型的每一个 token 增量、每一次工具调用、每一步推理决策都以事件形式记录并实时可订阅——`stream()` 事件流全量透传，让你像看 IDE Agent 一样看到完整工作过程。
 
 ### 🧠 推理模型一等公民
 

@@ -16,14 +16,14 @@
 <dependency>
     <groupId>dev.duo</groupId>
     <artifactId>duo-agent-sdk</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 
 **Gradle：**
 
 ```gradle
-implementation 'dev.duo:duo-agent-sdk:0.1.0'
+implementation 'dev.duo:duo-agent-sdk:0.2.0'
 ```
 
 > 💡 duo-agent 零第三方依赖（仅 SLF4J API），不想用 Logback 可以自由替换日志实现。
@@ -40,19 +40,25 @@ IDEA 中运行可在 *Run Configuration → Environment variables* 里设置（G
 
 ```java
 import dev.duo.api.DuoAgent;
+import dev.duo.api.DuoModel;
+import dev.duo.model.deepseek.DeepSeekModel;
 
 public class HelloWorld {
     public static void main(String[] args) {
-        var agent = DuoAgent.builder()
-                .apiFormat("openai")                        // API 格式
-                .baseUrl("https://api.deepseek.com")        // 服务地址
-                .apiKey(System.getenv("DEEPSEEK_API_KEY"))  // 密钥
+        // 第一步：模型配置（同一 Model 可复用给多个 Agent）
+        DuoModel model = DeepSeekModel.builder()
+                .apiKey(System.getenv("DEEPSEEK_API_KEY"))  // 可省略，回落环境变量
                 .model("deepseek-chat")                     // 模型
                 .contextWindow(128000)                      // 上下文窗口
+                .build();
+
+        // 第二步：Agent 组装（只管会话与工具）
+        var agent = DuoAgent.builder()
+                .model(model)                               // 必填：模型实例
                 .withSearchTools()                          // 启用搜索工具（grep + glob）
                 .build();
 
-        String response = agent.chat("当前目录有哪些 Java 文件？");
+        String response = agent.call("当前目录有哪些 Java 文件？");
         System.out.println(response);
     }
 }
@@ -70,8 +76,12 @@ agent.stream("写一个快速排序").subscribe(new Flow.Subscriber<>() {
         subscription = s;
         s.request(Long.MAX_VALUE);
     }
-    @Override public void onNext(String chunk) {
-        System.out.print(chunk);   // 文字实时逐段到达
+    @Override public void onNext(SessionEvent event) {
+        // 事件流全量透传（思考、文本、工具调用），只要文本增量时按类型过滤
+        if (event instanceof SessionEventAssistantChunk c
+                && c.chunk() instanceof StreamChunk.TextDelta d) {
+            System.out.print(d.text());   // 文字实时逐段到达
+        }
     }
     @Override public void onError(Throwable t) { t.printStackTrace(); }
     @Override public void onComplete() { System.out.println("\n— 完成 —"); }
@@ -80,18 +90,31 @@ agent.stream("写一个快速排序").subscribe(new Flow.Subscriber<>() {
 
 ## 配置速查
 
+两层 API：模型配置在 `DeepSeekModel.builder()` 上，会话与工具配置在 `DuoAgent.builder()` 上。
+
+**模型配置（`DeepSeekModel.builder()`）：**
+
 | 配置 | 必填 | 默认 | 说明 |
 |------|------|------|------|
-| `apiFormat("openai")` | ✅ | — | 目前仅支持 OpenAI 兼容格式 |
-| `baseUrl(...)` | ✅ | — | 如 DeepSeek、Ollama `http://localhost:11434/v1` |
-| `apiKey(...)` | ✅ | — | API 密钥 |
 | `model(...)` | ✅ | — | 如 `deepseek-chat`、`deepseek-reasoner` |
+| `apiKey(...)` | 可选 | 环境变量 `DEEPSEEK_API_KEY` | API 密钥 |
+| `baseUrl(...)` | 可选 | DeepSeek 官方端点 | 接其他 OpenAI 兼容服务时设置，如 Ollama `http://localhost:11434/v1` |
 | `contextWindow(...)` | 可选 | — | 上下文窗口 token 数 |
 | `maxOutputTokens(...)` | 可选 | 不限制 | 输出上限（推理模型建议不设） |
 | `enableReasoning(true)` | 可选 | false | 启用推理模式 |
 | `reasoningTimeout(...)` | 可选 | 5 分钟 | 推理模式超时 |
+| `systemPrompt(...)` | 可选 | — | 模型级系统提示词 |
+
+**Agent 配置（`DuoAgent.builder()`）：**
+
+| 配置 | 必填 | 默认 | 说明 |
+|------|------|------|------|
+| `model(duoModel)` | ✅ | — | `DuoModel` 实例 |
+| `systemPrompt(...)` | 可选 | 通用助手 | 系统提示词（优先级：Agent > Model > 内置默认） |
 | `timeout(...)` | 可选 | 60 秒 | 普通调用超时 |
-| `systemPrompt(...)` | 可选 | 通用助手 | 系统提示词 |
+| `withXxxTools()` / `tool(...)` | 可选 | — | 工具预设与自定义工具 |
+
+> **超时分层**：Agent 实际超时 = max(应用层 `timeout`，Model 的 `reasoningTimeout`)，底层 HTTP 超时在此基础上再加 1 分钟余量，保证应用层先于网络层超时。
 
 ## 常见问题
 
@@ -99,9 +122,9 @@ agent.stream("写一个快速排序").subscribe(new Flow.Subscriber<>() {
 GUI 应用不继承 shell 的 `export`。在 Run Configuration → Environment variables 中添加。
 
 **支持哪些模型？**
-一切 OpenAI 兼容 Chat Completions API：DeepSeek（`deepseek-chat` / `deepseek-reasoner`）、Ollama 本地模型、vLLM 自部署等。
+API 格式由 Model 实现决定——`DeepSeekModel` 即 OpenAI 兼容格式，通过 `baseUrl(...)` 可接一切 OpenAI 兼容 Chat Completions API：DeepSeek（`deepseek-chat` / `deepseek-reasoner`）、Ollama 本地模型、vLLM 自部署等。
 
 ## 下一步
 
-→ [对话 API](../02-guide/chat-api.md)：四种对话模式详解
+→ [对话 API](../02-guide/chat-api.md)：两种对话模式详解
 → [内置工具](../02-guide/tools-builtin.md)：工具能力全表

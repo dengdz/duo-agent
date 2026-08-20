@@ -4,10 +4,10 @@
 
 ## ✨ 特性
 
-- 🚀 **极简 API** - Builder 模式，开箱即用
+- 🚀 **极简 API** - 两层抽象：Model 管模型配置，Agent 管会话与工具
 - 🔧 **内置工具链** - bash、文件操作、代码编辑、搜索等
 - 🔌 **零依赖** - 纯 Java 21，无第三方依赖
-- 🧪 **高质量** - 232 个单元测试，100% 工具链稳定性
+- 🧪 **高质量** - 240 个单元测试，100% 工具链稳定性
 - 🎯 **ReAct 架构** - 成熟的推理-行动循环模式
 - 🧠 **推理模式** - 支持 DeepSeek-R1 等深度推理模型
 
@@ -20,13 +20,13 @@
 <dependency>
     <groupId>dev.duo</groupId>
     <artifactId>duo-agent-sdk</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 
 **Gradle:**
 ```gradle
-implementation 'dev.duo:duo-agent-sdk:0.1.0'
+implementation 'dev.duo:duo-agent-sdk:0.2.0'
 ```
 
 ### 2. 设置 API Key
@@ -39,19 +39,25 @@ export DEEPSEEK_API_KEY=your_api_key
 
 ```java
 import dev.duo.api.DuoAgent;
+import dev.duo.api.DuoModel;
+import dev.duo.model.deepseek.DeepSeekModel;
 
 public class HelloWorld {
     public static void main(String[] args) {
+        // 第一步：模型配置（同一 Model 可复用给多个 Agent）
+        DuoModel model = DeepSeekModel.builder()
+                .apiKey(System.getenv("DEEPSEEK_API_KEY"))  // 缺省回落环境变量
+                .model("deepseek-chat")
+                .contextWindow(128000)
+                .build();
+
+        // 第二步：Agent 组装（只管会话与工具，不重复填模型配置）
         var agent = DuoAgent.builder()
-                .apiFormat("openai")                              // API 格式
-                .baseUrl("https://api.deepseek.com")              // 基础 URL
-                .apiKey(System.getenv("DEEPSEEK_API_KEY"))        // API Key
-                .model("deepseek-chat")                           // 模型名称
-                .contextWindow(128000)                            // 上下文窗口（可选）
+                .model(model)
                 .withFileTools()
                 .build();
 
-        String response = agent.chat("当前目录有哪些 Java 文件？");
+        String response = agent.call("当前目录有哪些 Java 文件？");
         System.out.println(response);
     }
 }
@@ -65,28 +71,29 @@ public class HelloWorld {
 
 ```java
 var agent = DuoAgent.builder()
-        .apiFormat("openai")
-        .baseUrl("https://api.deepseek.com")
-        .apiKey(System.getenv("DEEPSEEK_API_KEY"))
-        .model("deepseek-chat")
+        .model(model)  // 复用同一个 model 实例
         .withCodeTools()  // bash + file + grep + edit
-        .systemPrompt("你是专业的 Java 代码助手")
+        .systemPrompt("你是专业的 Java 代码助手")  // 覆盖 model 的 systemPrompt
         .build();
 
-agent.chat("帮我重构 UserService.java 中的重复代码");
+agent.call("帮我重构 UserService.java 中的重复代码");
 ```
 
 ### 推理模型 Agent（DeepSeek-R1）
 
+推理配置属于模型本身，全部在 `DeepSeekModel` 上设置：
+
 ```java
-var agent = DuoAgent.builder()
-        .apiFormat("openai")
-        .baseUrl("https://api.deepseek.com")
+DuoModel model = DeepSeekModel.builder()
         .apiKey(System.getenv("DEEPSEEK_API_KEY"))
         .model("deepseek-reasoner")
         .contextWindow(64000)
         .enableReasoning(true)      // 启用深度推理（超时自动切换为推理超时，默认 5 分钟）
         // .reasoningTimeout(Duration.ofMinutes(8))  // 可选：自定义推理超时
+        .build();
+
+var agent = DuoAgent.builder()
+        .model(model)
         .withCodeTools()
         .build();
 ```
@@ -97,34 +104,40 @@ var agent = DuoAgent.builder()
 ### 完整配置
 
 ```java
+DuoModel model = DeepSeekModel.builder()
+        .apiKey("your-api-key")                     // 必填：API 密钥（回落 DEEPSEEK_API_KEY）
+        .baseUrl("https://api.deepseek.com")        // 可选：默认官方端点
+        .model("deepseek-chat")                     // 必填：模型名称
+        .contextWindow(128000)                      // 可选：上下文窗口
+        .maxOutputTokens(8000)                      // 可选：输出限制（默认不限制）
+        .temperature(0.7)                           // 可选：采样温度 [0, 2]
+        .enableReasoning(false)                     // 可选：推理模式（默认关闭）
+        .reasoningTimeout(Duration.ofMinutes(5))    // 可选：推理超时（默认 5 分钟）
+        .systemPrompt("你是专业的模型助手")           // 可选：模型级系统提示词
+        .build();
+
 var agent = DuoAgent.builder()
-        .apiFormat("openai")                          // 必填：API 格式（目前仅支持 "openai"）
-        .baseUrl("https://api.deepseek.com")          // 必填：API 基础 URL
-        .apiKey("your-api-key")                       // 必填：API 密钥
-        .model("deepseek-chat")                       // 必填：模型名称
-        .contextWindow(128000)                        // 可选：上下文窗口
-        .maxOutputTokens(8000)                        // 可选：输出限制（默认不限制）
-        .enableReasoning(false)                       // 可选：推理模式（默认关闭）
-        .timeout(Duration.ofSeconds(120))             // 可选：LLM 超时（默认 60 秒）
-        .systemPrompt("你是专业的代码审查助手")
-        .withCodeTools()                              // 代码工具集
-        .tool(new CustomTool().getDefinition())       // 自定义工具
+        .model(model)                               // 必填：模型实例
+        .systemPrompt("你是专业的代码审查助手")       // 可选：覆盖 model 的提示词
+        .timeout(Duration.ofSeconds(120))           // 可选：LLM 超时（默认 60 秒）
+        .withCodeTools()                            // 代码工具集
+        .tool(new CustomTool().getDefinition())     // 自定义工具
         .build();
 ```
 
-### 异步对话
-
-```java
-CompletableFuture<String> future = agent.chatAsync("分析项目依赖");
-future.thenAccept(System.out::println);
-```
+**systemPrompt 优先级**：Agent 显式设置 > Model 设置 > 内置默认。
+**超时分层**：Agent 实际超时 = max(应用层 timeout, Model 的 reasoningTimeout)，
+底层 HTTP 超时在此基础上再加 1 分钟余量，保证应用层先于网络层超时。
 
 > **线程安全提示：** 同一 DuoAgent 实例共享底层 Session，不是线程安全的。
-> 如需并发处理多个请求，请为每个请求创建独立的 Agent 实例。
+> 如需并发处理多个请求，请为每个请求创建独立的 Agent 实例
+> （Model 无状态线程安全，可以共享）。
 
 ### 流式对话（响应式流）
 
-`stream()` 返回 JDK 原生 `Flow.Publisher<String>`（Reactive Streams 规范），零第三方依赖：
+`stream()` 返回 JDK 原生 `Flow.Publisher<SessionEvent>`（Reactive Streams 规范），
+零第三方依赖。事件流完整透传 Agent 工作过程：思考增量、文本增量、
+工具调用与结果、step/turn 边界——只要文本增量时按类型过滤即可：
 
 ```java
 agent.stream("写一个排序算法").subscribe(new Flow.Subscriber<>() {
@@ -137,8 +150,12 @@ agent.stream("写一个排序算法").subscribe(new Flow.Subscriber<>() {
     }
 
     @Override
-    public void onNext(String chunk) {
-        System.out.print(chunk);  // 文本增量实时打印
+    public void onNext(SessionEvent event) {
+        // 只要文本增量：过滤 assistant/chunk 中的 TextDelta
+        if (event instanceof SessionEventAssistantChunk c
+                && c.chunk() instanceof StreamChunk.TextDelta d) {
+            System.out.print(d.text());  // 文本增量实时打印
+        }
     }
 
     @Override
@@ -152,58 +169,20 @@ agent.stream("写一个排序算法").subscribe(new Flow.Subscriber<>() {
 Spring WebFlux / RxJava 用户一行桥接：
 
 ```java
-Flux<String> flux = Flux.from(agent.stream("写一个排序算法"));          // Reactor
-Flowable<String> flowable = Flowable.fromPublisher(agent.stream(...)); // RxJava
+Flux<SessionEvent> flux = Flux.from(agent.stream("写一个排序算法"));   // Reactor
+Flowable<SessionEvent> flowable = Flowable.fromPublisher(agent.stream(...)); // RxJava
 ```
 
 行为说明：
 - **冷发布者** — 订阅时才发起对话，未订阅不消耗 API 调用
-- **仅推送文本增量** — 推理内容（`<think>` 思考过程）和工具调用参数不会推送
+- **全量事件** — 思考（ReasoningDelta）、文本（TextDelta）、工具调用、
+  边界事件全部推送，订阅者按需过滤
 - **多轮工具调用** — Agent 使用工具后会再次调用模型，订阅者收到多段连续文本流
 - **背压** — 通过 `request(n)` 控制拉取节奏，消费慢时增量内部缓冲不丢失
 - **取消** — `cancel()` 停止推送并释放资源，但底层对话轮继续执行完毕
 - **单订阅** — 每次调用返回的 Publisher 仅支持订阅一次
 
-### 多事件流（完整工作过程）
-
-`chatEvents()` 全量透传 session 事件（15 种类型），完整观察 Agent 的工作过程：
-思考推理、文本增量、工具调用与结果、step 边界、turn 结束原因——
-适合渲染 IDE Agent 式的工作过程界面。事件信封含 `seq` 单调序号（未来断线重连的基础）。
-
-```java
-agent.chatEvents("分析当前目录的代码").subscribe(new Flow.Subscriber<>() {
-    private Flow.Subscription subscription;
-
-    @Override
-    public void onSubscribe(Flow.Subscription s) {
-        subscription = s;
-        s.request(Long.MAX_VALUE);
-    }
-
-    @Override
-    public void onNext(SessionEvent event) {
-        switch (event) {
-            case SessionEventAssistantChunk c when c.chunk() instanceof StreamChunk.ReasoningDelta r
-                    -> showThinking(r.text());   // 思考过程（stream() 中被过滤，这里可见）
-            case SessionEventAssistantChunk c when c.chunk() instanceof StreamChunk.TextDelta t
-                    -> showAnswer(t.text());     // 回答文本
-            case SessionEventToolCall call
-                    -> showTool(call.name(), call.arguments());       // 工具调用
-            case SessionEventToolResult result
-                    -> showResult(result.message());                   // 工具结果
-            case SessionEventTurnEnd end
-                    -> finish(end.reason());          // turn 结束（完成信号，6 种原因）
-            default -> { /* 其余类型按需处理 */ }
-        }
-    }
-
-    @Override
-    public void onError(Throwable t) { /* ... */ }
-
-    @Override
-    public void onComplete() { /* ... */ }
-});
-```
+### 事件类型速查
 
 单 turn 事件时序：
 
@@ -231,7 +210,7 @@ turn/end                              finally 必发，携带结束原因
 
 > `todo/write`、`request/header`、`request/context` 三类事件已定义但当前主流程无产生点，出现时按需处理。
 
-与 `stream()` 的行为差异：仅过滤逻辑不同（文本投影 vs 全量透传），冷发布者/背压/取消/单订阅语义完全一致。完整演示见 `EventsExample`。
+完整事件流演示见 `EventsExample`。
 
 ### 在 Spring Boot 中桥接 SSE（前端流式对话）
 
@@ -240,7 +219,8 @@ Reactive Streams 中立标准，Spring Boot 应用直接在自己的代码里桥
 duo-agent 侧无需任何额外依赖。以下示例可整体拷贝到你的 Spring 项目。
 
 **关键前提：每请求一个 Agent 实例。** DuoAgent 非线程安全且 Session 有状态，
-不要注入单例 Agent 复用；`DuoAgent.builder()` 构建成本极低，每个请求新建。
+不要注入单例 Agent 复用；Model 无状态可全局共享，
+`DuoAgent.builder()` 构建成本极低，每个请求新建。
 
 #### Spring MVC（SseEmitter 方式）
 
@@ -248,15 +228,17 @@ duo-agent 侧无需任何额外依赖。以下示例可整体拷贝到你的 Spr
 @RestController
 public class ChatController {
 
+    private final DuoModel model = DeepSeekModel.builder()  // Model 全局共享
+            .apiKey(System.getenv("DEEPSEEK_API_KEY"))
+            .model("deepseek-chat")
+            .contextWindow(128000)
+            .build();
+
     @PostMapping(value = "/api/chat/stream")
     public SseEmitter chat(@RequestBody ChatRequest request) {
         SseEmitter emitter = new SseEmitter(0L);  // 不超时
         var agent = DuoAgent.builder()            // 每请求新建 Agent
-                .apiFormat("openai")
-                .baseUrl("https://api.deepseek.com")
-                .apiKey(System.getenv("DEEPSEEK_API_KEY"))
-                .model("deepseek-chat")
-                .contextWindow(128000)
+                .model(model)
                 .withCodeTools()
                 .build();
 
@@ -270,9 +252,13 @@ public class ChatController {
             }
 
             @Override
-            public void onNext(String chunk) {
+            public void onNext(SessionEvent event) {
                 try {
-                    emitter.send(SseEmitter.event().name("delta").data(chunk));
+                    // 只要文本增量；需要渲染工作过程时可透传全部事件类型
+                    if (event instanceof SessionEventAssistantChunk c
+                            && c.chunk() instanceof StreamChunk.TextDelta d) {
+                        emitter.send(SseEmitter.event().name("delta").data(d.text()));
+                    }
                 } catch (IOException e) {
                     subscription.cancel();  // 客户端断开，停止推送
                 }
@@ -303,25 +289,22 @@ public class ChatController {
 }
 ```
 
-#### 多事件类型变体（chatEvents → SSE）
+#### 多事件类型变体（完整工作过程 → SSE）
 
-前端要渲染完整工作过程（工具调用、思考过程）时，把 `stream` 换成 `chatEvents`，
-SSE 的 `event:` 字段直接用事件类型，前端按事件名分别渲染：
+前端要渲染完整工作过程（工具调用、思考过程）时，onNext 不过滤、
+按事件类型转发即可，SSE 的 `event:` 字段直接用事件类型，
+前端按事件名分别渲染：
 
 ```java
-agent.chatEvents(request.message()).subscribe(new Flow.Subscriber<>() {
-    // onSubscribe 同上
-    @Override
-    public void onNext(SessionEvent event) {
-        try {
-            // event: 字段 = 事件类型（turn/start、assistant/chunk、tool/call、tool/result、turn/end…）
-            emitter.send(SseEmitter.event().name(event.type()).data(describe(event)));
-        } catch (IOException e) {
-            subscription.cancel();
-        }
+@Override
+public void onNext(SessionEvent event) {
+    try {
+        // event: 字段 = 事件类型（turn/start、assistant/chunk、tool/call、tool/result、turn/end…）
+        emitter.send(SseEmitter.event().name(event.type()).data(describe(event)));
+    } catch (IOException e) {
+        subscription.cancel();
     }
-    // onError/onComplete 同上
-});
+}
 ```
 
 前端即可按 `tool_call` / `tool_result` / `turn_end` 等事件名分栏渲染 Agent 工作过程。
@@ -334,9 +317,14 @@ public class ChatController {
 
     @PostMapping(value = "/api/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> chat(@RequestBody ChatRequest request) {
-        var agent = DuoAgent.builder()/* 同上配置 */ .build();
+        var agent = DuoAgent.builder().model(model).build();
         return Flux.from(agent.stream(request.message()))
-                .map(chunk -> ServerSentEvent.<String>builder(chunk).event("delta").build())
+                .filter(e -> e instanceof SessionEventAssistantChunk c
+                        && c.chunk() instanceof StreamChunk.TextDelta)
+                .map(e -> {
+                    var d = (StreamChunk.TextDelta) ((SessionEventAssistantChunk) e).chunk();
+                    return ServerSentEvent.<String>builder(d.text()).event("delta").build();
+                })
                 .concatWith(Flux.just(ServerSentEvent.<String>builder("").event("done").build()))
                 .onErrorResume(e -> Flux.just(
                         ServerSentEvent.<String>builder(e.getMessage()).event("error").build()));
@@ -386,6 +374,19 @@ while (true) {
   SSE 注释行（`: ping`）防止空闲连接被掐断
 - **断线语义** — 当前流是一次性对话，断线即本轮作废，前端重新发起即可
 
+### 单次推理（不经 Agent）
+
+Model 本身就是无状态的单次推理接口，不需要会话/工具时直接用：
+
+```java
+String answer = model.call("解释什么是事件溯源");        // 同步阻塞
+
+model.stream("写一首诗").subscribe(...)                  // Flow.Publisher<StreamChunk>
+```
+
+Agent 的 `stream()` 推送 `SessionEvent`（会话语义），
+Model 的 `stream()` 推送 `StreamChunk`（单次响应语义），按场景选层。
+
 ### 访问底层 API（高级用户）
 
 ```java
@@ -416,7 +417,7 @@ Session session = agent.getSession();
 duo-agent/
 ├── duo-agent-sdk/          # SDK 核心模块
 │   ├── src/main/java/      # SDK 源码
-│   └── src/test/java/      # SDK 单元测试（232 个测试）
+│   └── src/test/java/      # SDK 单元测试（240 个测试）
 ├── duo-agent-example/      # 示例/调试模块
 │   └── src/main/java/      # 使用示例
 └── pom.xml                 # 父 POM
@@ -437,7 +438,16 @@ cd duo-agent
 mvn clean install
 ```
 
-### 设置环境变量
+### 设置 API Key
+
+方式一：项目根目录创建 `.env` 文件（示例模块自动读取）：
+
+```bash
+cp .env.example .env
+# 编辑 .env 填入 DEEPSEEK_API_KEY=sk-xxx
+```
+
+方式二：环境变量：
 
 ```bash
 export DEEPSEEK_API_KEY=your_api_key
@@ -449,14 +459,14 @@ export DEEPSEEK_API_KEY=your_api_key
 # Builder API 示例（推荐，最简单）
 mvn exec:java -pl duo-agent-example -Dexec.mainClass="com.example.HelloWorldExample"
 
-# 底层 API 示例（手动组装组件）
-mvn exec:java -pl duo-agent-example -Dexec.mainClass="com.example.QuickStartExample"
+# 流式输出示例
+mvn exec:java -pl duo-agent-example -Dexec.mainClass="com.example.StreamingChatExample"
 
-# 基础示例
-mvn exec:java -pl duo-agent-example -Dexec.mainClass="com.example.BasicAgentExample"
+# 事件流示例（完整工作过程）
+mvn exec:java -pl duo-agent-example -Dexec.mainClass="com.example.EventsExample"
 
-# 工具调用示例
-mvn exec:java -pl duo-agent-example -Dexec.mainClass="com.example.ToolCallingExample"
+# 推理模型示例（deepseek-reasoner）
+mvn exec:java -pl duo-agent-example -Dexec.mainClass="com.example.ReasonerExample"
 ```
 
 ## 🏗️ 架构设计
@@ -464,34 +474,37 @@ mvn exec:java -pl duo-agent-example -Dexec.mainClass="com.example.ToolCallingExa
 ### 核心模块
 
 **duo-agent-sdk** - 核心 SDK 模块，提供：
-- 🔌 **LLM 抽象层** - 统一的 LLM 接口（支持 DeepSeek，可扩展 OpenAI 等）
-- 🤖 **Agent 框架** - ReAct 模式实现（Reasoning + Acting 循环）
+- 🤖 **Model 抽象层** - `DuoModel` 单次推理接口（call/stream），厂商实现可插拔
+- 🤖 **Agent 框架** - ReAct 模式实现（Reasoning + Acting 循环），会话/工具/Hooks
 - 🛠️ **工具系统** - 内置 bash、文件操作、grep、glob、edit 等工具
 - 📝 **会话管理** - 事件溯源的对话历史管理
-- 🎯 **Builder API** - 简化的创建接口（本次新增）
+- 🎯 **Builder API** - 两层构建：DeepSeekModel + DuoAgent
 
 **duo-agent-example** - 示例项目：
 - `HelloWorldExample.java` - Builder API 快速开始（推荐）
-- `QuickStartExample.java` - 底层 API 演示（手动组装组件）
-- `StreamingChatExample.java` - stream() 流式输出演示
-- `EventsExample.java` - chatEvents() 多事件流演示（完整工作过程）
+- `StreamingChatExample.java` - stream() 流式文本输出演示
+- `EventsExample.java` - stream() 完整事件流演示（工作过程可见）
 - `ReasonerExample.java` - 推理模型（deepseek-reasoner）验证
+- `QuickStartExample.java` - 底层 API 演示（手动组装组件）
 - `BasicAgentExample.java` - 基础示例
 - `ToolCallingExample.java` - 工具调用演示
 - `DeepSeekToolsDemo.java` - 工具链稳定性测试
+- `EnvLoader.java` - .env 文件加载工具（示例自动读取 API Key）
 
-### API 对比
+### 两层 API（0.2.0）
 
-**新 Builder API（推荐）：**
+**高层 API（推荐）：**
 ```java
-var agent = DuoAgent.builder()
-    .apiFormat("openai")
-    .baseUrl("https://api.deepseek.com")
+DuoModel model = DeepSeekModel.builder()
     .apiKey(System.getenv("DEEPSEEK_API_KEY"))
     .model("deepseek-chat")
+    .build();
+
+var agent = DuoAgent.builder()
+    .model(model)
     .withFileTools()
     .build();
-String response = agent.chat("任务描述");
+String response = agent.call("任务描述");
 ```
 
 **底层 API（高级用户）：**
@@ -524,7 +537,7 @@ var agent = new ReactLoopAgent(...);
 ### 运行单元测试
 
 ```bash
-# 运行全部测试（232 个）
+# 运行全部测试（240 个）
 mvn test
 
 # 运行 SDK 测试
@@ -549,7 +562,7 @@ public class MyTool implements ToolProvider {
             this::execute
         );
     }
-    
+
     private ToolExecutionResult execute(Map<String, Object> args) {
         // 实现工具逻辑
         return new ToolExecutionResult("执行结果");
@@ -558,22 +571,19 @@ public class MyTool implements ToolProvider {
 
 // 使用
 var agent = DuoAgent.builder()
-    .apiFormat("openai")
-    .baseUrl("https://api.deepseek.com")
-    .apiKey(System.getenv("DEEPSEEK_API_KEY"))
-    .model("deepseek-chat")
+    .model(model)
     .tool(new MyTool().getDefinition())
     .build();
 ```
 
 ## ⚠️ 已知限制
 
-- **Anthropic 格式未支持** - `apiFormat()` 目前仅接受 `"openai"`，
-  Anthropic 格式计划在未来版本支持
+- **Anthropic 格式未支持** - 目前仅提供 DeepSeek（OpenAI 兼容格式）的
+  `DuoModel` 实现，Anthropic 格式计划在未来版本支持
 
 ## 📊 质量保证
 
-- ✅ **232 个单元测试** - 覆盖核心功能（含流式 API 测试）
+- ✅ **240 个单元测试** - 覆盖核心功能（含流式 API 测试）
 - ✅ **四轮 AI 代码审查** - 45 个问题全部修复
 - ✅ **100% 工具链稳定性** - 经过 DeepSeek API 实测验证
 - ✅ **零依赖** - 纯 Java 21，无第三方库

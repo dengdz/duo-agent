@@ -74,7 +74,7 @@ try (var persistence = new JsonlSessionPersistence(Path.of("sessions"))) {
 
 ## 与事件流的关系
 
-持久化与 `chatEvents()` 共享同一事件源：落盘的每一行就是 `chatEvents()` 推送的每一个事件。因此：
+持久化与 `stream()` 共享同一事件源：落盘的每一行就是 `stream()` 推送的每一个事件。因此：
 
 - 回放一个持久化会话 = 按 seq 顺序读取 JSONL 行
 - `sourceEventSeqs` 回链在持久化中同样保留（token 级追溯不丢失）
@@ -82,4 +82,4 @@ try (var persistence = new JsonlSessionPersistence(Path.of("sessions"))) {
 ## 路线图
 
 - Builder 门面入口（如 `builder.sessionFile(path)`）——规划中
-- 基于 seq 的断线重连（`chatEvents` 从指定 seq 续传）——规划中
+- 基于 seq 的断线重连（`stream()` 从指定 seq 续传）——规划中

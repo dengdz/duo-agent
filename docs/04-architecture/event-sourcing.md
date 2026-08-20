@@ -36,7 +36,7 @@ session.append(new SessionEventUserMessage(seq, message, new SurfaceOp.Append())
 
 ### 过程事件 —— 回放与观测
 
-`assistant/chunk`（token 级增量）、`tool/call`、`turn/*`、`step/*` 等：不进模型上下文，但完整记录"发生了什么"。`chatEvents()` 与 UI 渲染的数据源。
+`assistant/chunk`（token 级增量）、`tool/call`、`turn/*`、`step/*` 等：不进模型上下文，但完整记录"发生了什么"。`stream()` 与 UI 渲染的数据源。
 
 ### 簿记事件 —— 事务边界
 
@@ -72,7 +72,7 @@ assistant/message seq=9  sourceEventSeqs=[3,4,5,6,7,8]   ← 回链
 `SessionEventCodec` 把每个事件编码为一行 JSON（扁平判别格式，sealed 层级用 `"k"` 判别键）；`JsonlSessionPersistence` 逐行落盘。因此：
 
 - **回放会话 = 按 seq 顺序读取 JSONL**
-- `chatEvents()` 的实时推送与持久化内容**逐字节一致**
+- `stream()` 的实时推送与持久化内容**逐字节一致**
 - 未知 type 解码拒绝（安全），未知字段忽略（向前兼容）
 
 ## seq 的三个用途

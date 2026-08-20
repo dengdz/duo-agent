@@ -31,14 +31,18 @@ public class WeatherTool {
 ## 注册到 Agent
 
 ```java
-var agent = DuoAgent.builder()
-        .apiFormat("openai")
-        /* ...基础配置... */
-        .withFileTools()                          // 与预设混用
-        .tool(WeatherTool.definition())           // 添加自定义工具
+DuoModel model = DeepSeekModel.builder()      // 模型配置（可复用给多个 Agent）
+        .apiKey(System.getenv("DEEPSEEK_API_KEY"))
+        .model("deepseek-chat")
         .build();
 
-agent.chat("北京今天天气怎么样？");
+var agent = DuoAgent.builder()
+        .model(model)                         // 必填：模型实例
+        .withFileTools()                      // 与预设混用
+        .tool(WeatherTool.definition())       // 添加自定义工具
+        .build();
+
+agent.call("北京今天天气怎么样？");
 // 模型自动调用 get_weather(city="北京") 并组织回答
 ```
 

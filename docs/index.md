@@ -18,8 +18,8 @@ hero:
 
 features:
   - icon: 🚀
-    title: 四种对话模式
-    details: chat / chatAsync / stream / chatEvents——从同步阻塞到完整事件流逐级递进，前端可渲染完整 Agent 工作过程
+    title: 两种对话模式
+    details: call / stream——从同步阻塞到完整事件流逐级递进，stream() 事件流全量透传，前端可渲染完整 Agent 工作过程
   - icon: 🔧
     title: 开箱即用的工具链
     details: bash、文件读写、grep/glob 搜索、精确编辑等 8 种内置工具，5 组预设一键启用，ReAct 循环自主调度
@@ -40,16 +40,20 @@ features:
 ## 快速开始
 
 ```java
-var agent = DuoAgent.builder()
-        .apiFormat("openai")
-        .baseUrl("https://api.deepseek.com")
-        .apiKey(System.getenv("DEEPSEEK_API_KEY"))
+// 第一步：模型配置（同一 Model 可复用给多个 Agent）
+DuoModel model = DeepSeekModel.builder()
+        .apiKey(System.getenv("DEEPSEEK_API_KEY"))  // 可省略，回落环境变量
         .model("deepseek-chat")
         .contextWindow(128000)
+        .build();
+
+// 第二步：Agent 组装（只管会话与工具）
+var agent = DuoAgent.builder()
+        .model(model)
         .withCodeTools()
         .build();
 
-String response = agent.chat("列出当前目录的 Java 文件");
+String response = agent.call("列出当前目录的 Java 文件");
 ```
 
 → [5 分钟上手教程](01-getting-started/quick-start.md)
@@ -68,4 +72,4 @@ String response = agent.chat("列出当前目录的 Java 文件");
 
 - [项目 README](https://github.com/dengdz/duo-agent) —— 特性亮点
 - [示例程序](https://github.com/dengdz/duo-agent/tree/main/duo-agent-example) —— 16 个可运行示例
-- 232 个单元测试覆盖全部核心功能
+- 240 个单元测试覆盖全部核心功能

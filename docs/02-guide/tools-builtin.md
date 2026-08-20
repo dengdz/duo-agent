@@ -6,12 +6,14 @@ duo-agent 内置 8 种工具，模型通过 ReAct 循环自主决定何时调用
 
 ```java
 DuoAgent.builder()
+        .model(model)            // 必填：DuoModel 实例（模型配置见 DeepSeekModel.builder()）
         .withFileTools()          // file_read + file_write
         .withSearchTools()        // grep + glob
         .withEditTools()          // edit
         .withCodeTools()          // bash + file + search + edit（代码任务推荐）
         .withAllBuiltinTools()    // withCodeTools + todo_write
         ...
+        .build();
 ```
 
 > 💡 预设与自定义工具混用时，按**工具名去重（last-wins）**：后添加的定义覆盖先添加的——显式工具可以覆盖预设。
@@ -131,7 +133,7 @@ DuoAgent.builder()
 模型：当前目录共有 166 个 Java 文件……
 ```
 
-整个过程在 `chatEvents()` 中完整可见（`tool/call` → `tool/result` 事件成对出现）。
+整个过程在 `stream()` 中完整可见（`tool/call` → `tool/result` 事件成对出现）。
 
 ## 下一步
 

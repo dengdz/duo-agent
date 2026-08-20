@@ -1,6 +1,6 @@
 # 事件类型参考
 
-`chatEvents()` 全量透传 15 种 `SessionEvent`。本文是完整字段速查表。
+`stream()` 全量透传 15 种 `SessionEvent`。本文是完整字段速查表。
 
 ## 事件信封公共字段
 

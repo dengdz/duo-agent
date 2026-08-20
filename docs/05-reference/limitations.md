@@ -6,16 +6,15 @@
 
 ### API 格式
 
-- **仅支持 OpenAI 兼容格式**（`apiFormat("openai")`）。DeepSeek、Ollama、vLLM 等均可用；Anthropic（Claude 原生协议）适配器尚未实现，`apiFormat("anthropic")` 会被直接拒绝。
+- **目前仅提供 DeepSeek（OpenAI 兼容格式）的 `DuoModel` 实现**（API 格式由 Model 实现决定，不再是 Builder 参数）。通过自定义 `baseUrl` 可对接 OpenAI 兼容的自部署端点（Ollama、vLLM 等）；Anthropic（Claude 原生协议）的 DuoModel 实现尚未完成。
 
 ### 线程模型
 
-- **DuoAgent 实例非线程安全**：实例共享 Session 状态，不可并发调用同一实例。并发场景请每请求新建（构建成本极低）。
-- `chatAsync` 使用 commonPool，高并发生产环境建议自定义线程池包装。
+- **DuoAgent 实例非线程安全**：实例共享 Session 状态，不可并发调用同一实例。并发场景请每请求新建（构建成本极低；`DuoModel` 无状态可全局共享）。需要异步时由调用方自行包装：`CompletableFuture.supplyAsync(() -> agent.call(msg), executor)`。
 
 ### 流式 API
 
-- **断线不能续传**：`stream()`/`chatEvents()` 是一次性对话流，连接断开即本轮作废。（session seq 已为续传打好基础，见路线图）
+- **断线不能续传**：`stream()` 是一次性对话流，连接断开即本轮作废。（session seq 已为续传打好基础，见路线图）
 - **取消不中断推理**：订阅 `cancel()` 只停止推送，底层对话轮会执行完毕（仍消耗一次 API 调用）。
 
 ### 尚未接入门面的功能
@@ -45,12 +44,12 @@
 ### 近期
 
 - **Builder 暴露高级功能入口**：压缩 / 重试 / 持久化 / Skill 一键启用
-- **断线重连续传**：基于 session seq 的 `chatEvents` 断点恢复
+- **断线重连续传**：基于 session seq 的 `stream()` 断点恢复
 - **todo/write 事件接线**：todo 状态入日志，UI 可实时渲染任务列表
 
 ### 中期
 
-- **Anthropic 适配器**：`apiFormat("anthropic")`（Claude 原生协议）
+- **Anthropic 的 DuoModel 实现**：Claude 原生协议支持
 - **多 Agent 管理**：AgentRegistry/Factory 接入门面，子 Agent 编排
 - **请求头记录**：request/header 事件接线（可审计每次请求的完整配置）
 

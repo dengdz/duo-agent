@@ -70,7 +70,7 @@ var agent = new ReactLoopAgent(
 
 ## 事件可观测
 
-压缩过程在 `chatEvents()` 中完整可见：
+压缩过程在 `stream()` 事件流中完整可见：
 
 ```
 compaction/start   (compactionId, turn)

@@ -1,8 +1,8 @@
 # Spring Boot SSE 桥接
 
-把 duo-agent 的流式输出接入前端。duo-agent 是**纯 Java SDK，不绑定任何框架**——`stream()`/`chatEvents()` 返回的 `Flow.Publisher` 是 Reactive Streams 中立标准，Spring Boot 应用在自己的代码里桥接即可，无需 duo-agent 侧的任何额外依赖。
+把 duo-agent 的流式输出接入前端。duo-agent 是**纯 Java SDK，不绑定任何框架**——`stream()` 返回的 `Flow.Publisher` 是 Reactive Streams 中立标准，Spring Boot 应用在自己的代码里桥接即可，无需 duo-agent 侧的任何额外依赖。
 
-> ⚠️ **关键前提：每请求一个 Agent 实例。** DuoAgent 非线程安全且 Session 有状态，不要注入单例 Agent 复用；`DuoAgent.builder()` 构建成本极低，每个请求新建。
+> ⚠️ **关键前提：每请求一个 Agent 实例。** DuoAgent 非线程安全且 Session 有状态，不要注入单例 Agent 复用；`DuoAgent.builder()` 构建成本极低，每个请求新建。**Model 无状态线程安全**，作为单例字段全局共享即可——每个请求只重复组装 Agent，不重复构建模型配置。
 
 ## 方案一：Spring MVC（SseEmitter）
 
@@ -10,15 +10,17 @@
 @RestController
 public class ChatController {
 
+    private final DuoModel model = DeepSeekModel.builder()  // Model 全局共享
+            .apiKey(System.getenv("DEEPSEEK_API_KEY"))     // 缺省回落环境变量
+            .model("deepseek-chat")
+            .contextWindow(128000)
+            .build();
+
     @PostMapping(value = "/api/chat/stream")
     public SseEmitter chat(@RequestBody ChatRequest request) {
         SseEmitter emitter = new SseEmitter(0L);  // 不超时
         var agent = DuoAgent.builder()            // 每请求新建 Agent
-                .apiFormat("openai")
-                .baseUrl("https://api.deepseek.com")
-                .apiKey(System.getenv("DEEPSEEK_API_KEY"))
-                .model("deepseek-chat")
-                .contextWindow(128000)
+                .model(model)
                 .withCodeTools()
                 .build();
 
@@ -29,9 +31,13 @@ public class ChatController {
                 subscription = s;
                 s.request(Long.MAX_VALUE);
             }
-            @Override public void onNext(String chunk) {
+            @Override public void onNext(SessionEvent event) {
                 try {
-                    emitter.send(SseEmitter.event().name("delta").data(chunk));
+                    // 只要文本增量；需要渲染工作过程时可透传全部事件类型
+                    if (event instanceof SessionEventAssistantChunk c
+                            && c.chunk() instanceof StreamChunk.TextDelta d) {
+                        emitter.send(SseEmitter.event().name("delta").data(d.text()));
+                    }
                 } catch (IOException e) {
                     subscription.cancel();  // 客户端断开，停止推送
                 }
@@ -64,9 +70,14 @@ public class ChatController {
 
     @PostMapping(value = "/api/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> chat(@RequestBody ChatRequest request) {
-        var agent = DuoAgent.builder()/* 同上配置 */ .build();
+        var agent = DuoAgent.builder().model(model).build();  // model 同上全局共享
         return Flux.from(agent.stream(request.message()))
-                .map(chunk -> ServerSentEvent.<String>builder(chunk).event("delta").build())
+                .filter(e -> e instanceof SessionEventAssistantChunk c
+                        && c.chunk() instanceof StreamChunk.TextDelta)
+                .map(e -> {
+                    var d = (StreamChunk.TextDelta) ((SessionEventAssistantChunk) e).chunk();
+                    return ServerSentEvent.<String>builder(d.text()).event("delta").build();
+                })
                 .concatWith(Flux.just(ServerSentEvent.<String>builder("").event("done").build()))
                 .onErrorResume(e -> Flux.just(
                         ServerSentEvent.<String>builder(e.getMessage()).event("error").build()));
@@ -76,24 +87,21 @@ public class ChatController {
 
 背压在 WebFlux 下**端到端打通**：前端消费慢 → Netty 缓冲堆积 → Flux 自动减少 `request(n)` → SDK 内部缓冲兜住 → 不丢数据、不爆内存。
 
-## 多事件类型（chatEvents → SSE）
+## 多事件类型变体（完整工作过程 → SSE）
 
-前端要渲染完整工作过程（工具调用、思考过程）时，把 `stream` 换成 `chatEvents`，SSE 的 `event:` 字段直接用事件类型：
+前端要渲染完整工作过程（工具调用、思考过程）时，`onNext` 不过滤、按事件类型转发即可，SSE 的 `event:` 字段直接用事件类型：
 
 ```java
-agent.chatEvents(request.message()).subscribe(new Flow.Subscriber<>() {
-    // onSubscribe 同上
-    @Override public void onNext(SessionEvent event) {
-        try {
-            emitter.send(SseEmitter.event()
-                    .name(event.type())          // "delta"粒度变成事件类型粒度
-                    .data(describe(event)));     // 按需序列化事件内容
-        } catch (IOException e) {
-            subscription.cancel();
-        }
+@Override public void onNext(SessionEvent event) {
+    try {
+        // event: 字段 = 事件类型（turn/start、assistant/chunk、tool/call、tool/result、turn/end…）
+        emitter.send(SseEmitter.event()
+                .name(event.type())          // "delta"粒度变成事件类型粒度
+                .data(describe(event)));     // 按需序列化事件内容
+    } catch (IOException e) {
+        subscription.cancel();
     }
-    // onError / onComplete 同上
-});
+}
 ```
 
 前端即可按 `tool/call` / `tool/result` / `assistant/chunk` / `turn/end` 等事件名（即 `type()` 的斜杠形式原值）分别渲染。
