@@ -1,6 +1,43 @@
-# duo-agent 文档
+---
+layout: home
 
-**零依赖的 Java 21 AI Agent SDK** —— 用几行代码创建能调用工具、流式输出、完整可观测的智能体。
+hero:
+  name: duo-agent
+  text: 零依赖的 Java 21 AI Agent SDK
+  tagline: 几行代码创建能调用工具、流式输出、完整可观测的智能体
+  actions:
+    - theme: brand
+      text: 快速开始
+      link: /01-getting-started/quick-start
+    - theme: alt
+      text: 简介
+      link: /01-getting-started/introduction
+    - theme: alt
+      text: GitHub
+      link: https://github.com/dengdz/duo-agent
+
+features:
+  - icon: 🚀
+    title: 四种对话模式
+    details: chat / chatAsync / stream / chatEvents——从同步阻塞到完整事件流逐级递进，前端可渲染完整 Agent 工作过程
+  - icon: 🔧
+    title: 开箱即用的工具链
+    details: bash、文件读写、grep/glob 搜索、精确编辑等 8 种内置工具，5 组预设一键启用，ReAct 循环自主调度
+  - icon: 📡
+    title: 真流式、可观测
+    details: SSE 全链路流式，15 种会话事件（token 级增量、工具往返、思考过程）实时可订阅
+  - icon: 🧠
+    title: 推理模型一等公民
+    details: DeepSeek-R1 原生支持：独立推理超时、思考过程与回答分离、不截断长推理输出
+  - icon: 🧩
+    title: 事件溯源会话
+    details: append-only 事件日志唯一事实源，JSONL 持久化、崩溃恢复、token 级回放
+  - icon: 🪶
+    title: 零第三方依赖
+    details: 纯 Java 21（仅 SLF4J API），不绑定任何框架——Spring Boot、纯 Java、Vert.x 一视同仁
+---
+
+## 快速开始
 
 ```java
 var agent = DuoAgent.builder()
@@ -15,53 +52,20 @@ var agent = DuoAgent.builder()
 String response = agent.chat("列出当前目录的 Java 文件");
 ```
 
+→ [5 分钟上手教程](01-getting-started/quick-start.md)
+
 ## 文档导航
 
-### 入门
-
-| 文档 | 内容 |
+| 章节 | 内容 |
 |------|------|
-| [简介](01-getting-started/introduction.md) | duo-agent 是什么、核心特性、适用场景 |
-| [快速开始](01-getting-started/quick-start.md) | 5 分钟从依赖到第一次对话 |
-
-### 指南
-
-| 文档 | 内容 |
-|------|------|
-| [对话 API](02-guide/chat-api.md) | 四种对话模式：chat / chatAsync / stream / chatEvents |
-| [流式输出](02-guide/streaming.md) | 响应式流深入：背压、取消、冷发布者语义 |
-| [内置工具](02-guide/tools-builtin.md) | bash / 文件 / 搜索 / 编辑 / todo 工具能力详解 |
-| [自定义工具](02-guide/tools-custom.md) | 用 ToolDefinition 扩展 Agent 能力 |
-| [推理模型](02-guide/reasoning-models.md) | DeepSeek-R1 等深度推理模型支持 |
-| [Spring Boot SSE 桥接](02-guide/spring-sse.md) | 把流式输出接入前端（MVC / WebFlux / 前端 JS） |
-
-### 高级
-
-| 文档 | 内容 |
-|------|------|
-| [Hook 扩展点](03-advanced/hooks.md) | 4 类 Hook：消息改写、请求定制、失败恢复、工具环绕 |
-| [LLM 自动重试](03-advanced/retry.md) | LlmRetryHook：指数退避 + 尊重 Retry-After |
-| [上下文压缩](03-advanced/compaction.md) | 长对话自动摘要，防止上下文溢出 |
-| [会话持久化](03-advanced/session-persistence.md) | JSONL 落盘、崩溃恢复、跨进程续聊 |
-| [Skill 系统](03-advanced/skills.md) | SKILL.md 技能加载与注入 |
-
-### 架构
-
-| 文档 | 内容 |
-|------|------|
-| [架构总览](04-architecture/overview.md) | 分层设计：门面 → Agent 循环 → 适配层 |
-| [事件溯源](04-architecture/event-sourcing.md) | Session 日志：唯一事实源的设计 |
-| [ReAct 循环](04-architecture/react-loop.md) | turn / step 生命周期与事件时序 |
-
-### 参考
-
-| 文档 | 内容 |
-|------|------|
-| [事件类型参考](05-reference/events.md) | 15 种 SessionEvent 完整字段表 |
-| [已知限制与路线图](05-reference/limitations.md) | 未接线功能、规划中的能力 |
+| [入门](01-getting-started/introduction.md) | duo-agent 是什么、核心特性、适用场景 |
+| [指南](02-guide/chat-api.md) | 对话 API、流式、工具、自定义工具、推理模型、SSE 桥接 |
+| [高级](03-advanced/hooks.md) | Hook 扩展、自动重试、上下文压缩、持久化、Skill 系统 |
+| [架构](04-architecture/overview.md) | 分层设计、事件溯源、ReAct 循环 |
+| [参考](05-reference/events.md) | 事件类型速查、已知限制与路线图 |
 
 ## 更多资源
 
-- [项目 README](../README.md) —— 特性亮点与快速印象
-- [示例程序](../duo-agent-example/src/main/java/com/example/) —— 16 个可运行示例
-- 235 个单元测试（`@Test` 计数，默认套件执行 232 个——集成测试默认排除）覆盖全部核心功能
+- [项目 README](https://github.com/dengdz/duo-agent) —— 特性亮点
+- [示例程序](https://github.com/dengdz/duo-agent/tree/main/duo-agent-example) —— 16 个可运行示例
+- 232 个单元测试覆盖全部核心功能

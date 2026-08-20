@@ -47,3 +47,8 @@ sessions-demo/
 logs/
 # ZCode 会话文件
 .zcode/
+
+# 文档站构建（website）
+website/node_modules/
+website/.vitepress/dist/
+website/.vitepress/cache/
