@@ -16,14 +16,14 @@
 <dependency>
     <groupId>dev.duo</groupId>
     <artifactId>duo-agent-sdk</artifactId>
-    <version>0.3.0</version>
+    <version>0.4.0</version>
 </dependency>
 ```
 
 **Gradle：**
 
 ```gradle
-implementation 'dev.duo:duo-agent-sdk:0.3.0'
+implementation 'dev.duo:duo-agent-sdk:0.4.0'
 ```
 
 > 💡 duo-agent 零第三方依赖（仅 SLF4J API），不想用 Logback 可以自由替换日志实现。

@@ -1,5 +1,6 @@
 package dev.duo.tool;
 
+import dev.duo.model.llm.ToolExecution;
 import dev.duo.api.skill.Skill;
 import dev.duo.api.skill.SkillSource;
 import dev.duo.core.skill.SkillRegistry;
@@ -22,7 +23,7 @@ class SkillToolTest {
     private SkillTool tool;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         registry = new SkillRegistry();
         tool = new SkillTool(registry);
         
@@ -31,7 +32,7 @@ class SkillToolTest {
     }
 
     @Test
-    void testGetDefinition_whenCalled_thenNameIsSkill() {
+    void testGetDefinition_whenCalled_thenNameIsSkill() throws Exception {
         var definition = tool.getDefinition();
         
         assertEquals("skill", definition.name());
@@ -41,8 +42,8 @@ class SkillToolTest {
     }
 
     @Test
-    void testExecute_whenSkillExists_thenReturnContent() {
-        var result = tool.getDefinition().executor().apply(Map.of("name", "test-skill"));
+    void testExecute_whenSkillExists_thenReturnContent() throws Exception {
+        var result = tool.getDefinition().executor().execute(ToolExecution.of(Map.of("name", "test-skill")));
         
         assertFalse(result.isError());
         var block = result.content().get(0);
@@ -52,8 +53,8 @@ class SkillToolTest {
     }
 
     @Test
-    void testExecute_whenSkillNotExistent_thenReturnNotFoundMessage() {
-        var result = tool.getDefinition().executor().apply(Map.of("name", "non-existent"));
+    void testExecute_whenSkillNotExistent_thenReturnNotFoundMessage() throws Exception {
+        var result = tool.getDefinition().executor().execute(ToolExecution.of(Map.of("name", "non-existent")));
         
         assertFalse(result.isError());
         var block = result.content().get(0);
@@ -63,8 +64,8 @@ class SkillToolTest {
     }
 
     @Test
-    void testExecute_whenNameMissing_thenReturnErrorMessage() {
-        var result = tool.getDefinition().executor().apply(Map.of());
+    void testExecute_whenNameMissing_thenReturnErrorMessage() throws Exception {
+        var result = tool.getDefinition().executor().execute(ToolExecution.of(Map.of()));
         
         assertFalse(result.isError());
         var block = result.content().get(0);
@@ -74,8 +75,8 @@ class SkillToolTest {
     }
 
     @Test
-    void testExecute_whenNameBlank_thenReturnErrorMessage() {
-        var result = tool.getDefinition().executor().apply(Map.of("name", "  "));
+    void testExecute_whenNameBlank_thenReturnErrorMessage() throws Exception {
+        var result = tool.getDefinition().executor().execute(ToolExecution.of(Map.of("name", "  ")));
         
         assertFalse(result.isError());
         var block = result.content().get(0);

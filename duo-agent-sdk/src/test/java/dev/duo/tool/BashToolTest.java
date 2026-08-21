@@ -1,6 +1,7 @@
 package dev.duo.tool;
 
 import dev.duo.core.llm.ToolRegistryImpl;
+import dev.duo.model.llm.ToolExecution;
 import dev.duo.model.llm.ContentBlock;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -20,12 +21,12 @@ import static org.junit.jupiter.api.Assertions.*;
 class BashToolTest {
 
     @Test
-    void testExecute_whenSimpleCommand_thenReturnsOutput() {
+    void testExecute_whenSimpleCommand_thenReturnsOutput() throws Exception {
         assumePosix();
         var registry = new ToolRegistryImpl();
         registry.register(new BashTool().getDefinition());
 
-        var result = registry.execute("bash", java.util.Map.of("command", "echo hello"));
+        var result = registry.execute("bash", ToolExecution.of(java.util.Map.of("command", "echo hello")));
         printResult("simple command", result);
 
         assertFalse(result.isError());
@@ -34,7 +35,7 @@ class BashToolTest {
     }
 
     @Test
-    void testExecute_whenCwdSpecified_thenRunsInDirectory() throws IOException {
+    void testExecute_whenCwdSpecified_thenRunsInDirectory() throws Exception {
         assumePosix();
         var tmp = Files.createTempDirectory("bash-test");
         Files.writeString(tmp.resolve("marker.txt"), "in here");
@@ -42,10 +43,10 @@ class BashToolTest {
         var registry = new ToolRegistryImpl();
         registry.register(new BashTool().getDefinition());
 
-        var result = registry.execute("bash", java.util.Map.of(
+        var result = registry.execute("bash", ToolExecution.of(java.util.Map.of(
                 "command", "cat marker.txt",
                 "cwd", tmp.toString()
-        ));
+        )));
         printResult("specified cwd", result);
 
         assertFalse(result.isError());
@@ -54,12 +55,12 @@ class BashToolTest {
     }
 
     @Test
-    void testExecute_whenNonZeroExit_thenIncludesExitCode() {
+    void testExecute_whenNonZeroExit_thenIncludesExitCode() throws Exception {
         assumePosix();
         var registry = new ToolRegistryImpl();
         registry.register(new BashTool().getDefinition());
 
-        var result = registry.execute("bash", java.util.Map.of("command", "exit 42"));
+        var result = registry.execute("bash", ToolExecution.of(java.util.Map.of("command", "exit 42")));
         printResult("non-zero exit", result);
 
         assertFalse(result.isError()); // 工具本身没抛异常，结果中带上退出码
@@ -68,12 +69,12 @@ class BashToolTest {
     }
 
     @Test
-    void testExecute_whenCommandEmpty_thenReturnsError() {
+    void testExecute_whenCommandEmpty_thenReturnsError() throws Exception {
         assumePosix();
         var registry = new ToolRegistryImpl();
         registry.register(new BashTool().getDefinition());
 
-        var result = registry.execute("bash", java.util.Map.of("command", ""));
+        var result = registry.execute("bash", ToolExecution.of(java.util.Map.of("command", "")));
         printResult("empty command", result);
 
         assertFalse(result.isError());

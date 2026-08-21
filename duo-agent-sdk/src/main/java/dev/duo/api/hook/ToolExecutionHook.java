@@ -51,12 +51,17 @@ public interface ToolExecutionHook {
             int step,
             CallId callId,
             String toolName,
-            Map<String, Object> arguments
+            Map<String, Object> arguments,
+            /** 本 turn 的取消信号：审批等等待类 hook 用它与用户应答 race。 */
+            dev.duo.api.agent.CancellationSignal cancellation
     ) {
         public ToolCallContext {
             // 不用 Map.copyOf：JSON 参数可含 null 值，copyOf 会抛 NPE；
             // LinkedHashMap 保留解析顺序且容忍 null 值
             arguments = Collections.unmodifiableMap(new LinkedHashMap<>(arguments));
+            if (cancellation == null) {
+                throw new IllegalArgumentException("cancellation 不能为 null");
+            }
         }
     }
 }

@@ -68,6 +68,20 @@ public final class DuoAgentImpl implements DuoAgent {
             throw new RuntimeException("Agent 执行被中断", e);
         }
 
+        // 检查最后一个 turn 的结束原因
+        var events = session.events();
+        for (int i = events.size() - 1; i >= 0; i--) {
+            var event = events.get(i);
+            if (event.type().equals("turn/end")) {
+                var turnEnd = (dev.duo.model.session.SessionEventTurnEnd) event;
+                if (turnEnd.reason() instanceof dev.duo.model.session.TurnEndReason.Aborted) {
+                    // 取消导致无响应消息是正常情况，返回空字符串或提示
+                    return "(Agent 已取消)";
+                }
+                break;
+            }
+        }
+
         // 验证是否生成了新的 Assistant 消息
         var messageCountAfter = session.deriveMessages().size();
         if (messageCountAfter <= messageCountBefore + 1) {

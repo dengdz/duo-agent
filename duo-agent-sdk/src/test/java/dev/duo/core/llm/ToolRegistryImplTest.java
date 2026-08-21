@@ -2,6 +2,8 @@ package dev.duo.core.llm;
 
 import dev.duo.tool.TodoWriteTool;
 import dev.duo.model.llm.ToolDefinition;
+import dev.duo.model.llm.ToolExecution;
+import dev.duo.model.llm.ToolExecutor;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -18,9 +20,9 @@ import static org.junit.jupiter.api.Assertions.*;
 class ToolRegistryImplTest {
 
     @Test
-    void testRegister_whenToolAdded_thenQueryable() {
+    void testRegister_whenToolAdded_thenQueryable() throws Exception {
         var registry = new ToolRegistryImpl();
-        var tool = new ToolDefinition("test", "Test tool", Map.of("type", "object"), args -> null);
+        var tool = new ToolDefinition("test", "Test tool", Map.of("type", "object"), ToolExecutor.of(args -> null));
         registry.register(tool);
 
         assertNotNull(registry.get("test"));
@@ -28,60 +30,60 @@ class ToolRegistryImplTest {
     }
 
     @Test
-    void testRegister_whenDuplicateName_thenThrows() {
+    void testRegister_whenDuplicateName_thenThrows() throws Exception {
         var registry = new ToolRegistryImpl();
-        var tool = new ToolDefinition("dup", "Dup", Map.of("type", "object"), args -> null);
+        var tool = new ToolDefinition("dup", "Dup", Map.of("type", "object"), ToolExecutor.of(args -> null));
         registry.register(tool);
         assertThrows(IllegalArgumentException.class, () -> registry.register(tool));
     }
 
     @Test
-    void testExecute_whenToolRuns_thenReturnsResult() {
+    void testExecute_whenToolRuns_thenReturnsResult() throws Exception {
         var registry = new ToolRegistryImpl();
         registry.register(new ToolDefinition("echo", "Echo", Map.of(
                 "type", "object",
                 "properties", Map.of("text", Map.of("type", "string"))
-        ), args -> {
+        ), ToolExecutor.of(args -> {
             var text = args.getOrDefault("text", "none");
             return new dev.duo.model.llm.ToolExecutionResult("ECHO: " + text);
-        }));
+        })));
 
-        var result = registry.execute("echo", Map.of("text", "hello"));
+        var result = registry.execute("echo", ToolExecution.of(Map.of("text", "hello")));
         assertFalse(result.isError());
         assertEquals("ECHO: hello", ((dev.duo.model.llm.ContentBlock.Text) result.content().getFirst()).text());
     }
 
     @Test
-    void testExecute_whenUnknownTool_thenThrows() {
+    void testExecute_whenUnknownTool_thenThrows() throws Exception {
         var registry = new ToolRegistryImpl();
         assertThrows(IllegalArgumentException.class, () ->
-                registry.execute("unknown", Map.of())
-        );
+                registry.execute("unknown", ToolExecution.of(Map.of())
+        ));
     }
 
     @Test
-    void testExecute_whenToolThrows_thenReturnsErrorResult() {
+    void testExecute_whenToolThrows_thenReturnsErrorResult() throws Exception {
         var registry = new ToolRegistryImpl();
-        registry.register(new ToolDefinition("crash", "Crash", Map.of("type", "object"), args -> {
+        registry.register(new ToolDefinition("crash", "Crash", Map.of("type", "object"), ToolExecutor.of(args -> {
             throw new RuntimeException("爆炸");
-        }));
+        })));
 
-        var result = registry.execute("crash", Map.of());
+        var result = registry.execute("crash", ToolExecution.of(Map.of()));
         assertTrue(result.isError());
     }
 
     @Test
-    void testExecute_whenTodoWriteArgs_thenRecordsTodos() {
+    void testExecute_whenTodoWriteArgs_thenRecordsTodos() throws Exception {
         var registry = new ToolRegistryImpl();
         var todoTool = new TodoWriteTool();
         registry.register(todoTool.getDefinition());
 
-        var result = registry.execute("todo_write", Map.of(
+        var result = registry.execute("todo_write", ToolExecution.of(Map.of(
                 "todos", List.of(
                         Map.of("content", "任务1", "status", "pending"),
                         Map.of("content", "任务2", "status", "in_progress")
                 )
-        ));
+        )));
 
         assertFalse(result.isError());
         assertEquals(2, todoTool.getTodos().size());
@@ -91,7 +93,7 @@ class ToolRegistryImplTest {
     @Test
     void testRegister_whenDisposed_thenRemoved() throws Exception {
         var registry = new ToolRegistryImpl();
-        var disposer = registry.register(new ToolDefinition("temp", "Temp", Map.of("type", "object"), args -> null));
+        var disposer = registry.register(new ToolDefinition("temp", "Temp", Map.of("type", "object"), ToolExecutor.of(args -> null)));
         assertEquals(1, registry.getAll().size());
 
         disposer.close();

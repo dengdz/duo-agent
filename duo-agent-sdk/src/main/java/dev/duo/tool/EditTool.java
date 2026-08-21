@@ -1,6 +1,7 @@
 package dev.duo.tool;
 
 import dev.duo.model.llm.ToolDefinition;
+import dev.duo.model.llm.ToolExecutor;
 import dev.duo.model.llm.ToolExecutionResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,7 +81,7 @@ public class EditTool {
                         ),
                         "required", List.of(ARG_COMMAND, ARG_PATH)
                 ),
-                this::execute
+                ToolExecutor.of(this::execute)
         );
     }
 

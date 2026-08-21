@@ -1,6 +1,7 @@
 package dev.duo.tool;
 
 import dev.duo.model.llm.ToolDefinition;
+import dev.duo.model.llm.ToolExecutor;
 import dev.duo.model.llm.ToolExecutionResult;
 import dev.duo.model.session.TodoItem;
 import dev.duo.model.session.TodoStatus;
@@ -56,7 +57,7 @@ public class TodoWriteTool {
                         ),
                         "required", List.of(ARG_TODOS)
                 ),
-                this::execute
+                ToolExecutor.of(this::execute)
         );
     }
 

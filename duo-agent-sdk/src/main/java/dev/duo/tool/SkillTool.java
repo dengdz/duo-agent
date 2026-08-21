@@ -2,6 +2,7 @@ package dev.duo.tool;
 
 import dev.duo.core.skill.SkillRegistry;
 import dev.duo.model.llm.ToolDefinition;
+import dev.duo.model.llm.ToolExecutor;
 import dev.duo.model.llm.ToolExecutionResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +48,7 @@ public class SkillTool {
                         ),
                         "required", List.of(ARG_NAME)
                 ),
-                this::execute
+                ToolExecutor.of(this::execute)
         );
     }
 

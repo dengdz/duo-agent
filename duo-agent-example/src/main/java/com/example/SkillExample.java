@@ -11,6 +11,7 @@ import dev.duo.core.skill.FilesystemSkillProvider;
 import dev.duo.core.skill.SkillCatalogSection;
 import dev.duo.core.skill.SkillRegistry;
 import dev.duo.core.session.Session;
+import dev.duo.model.llm.ToolExecution;
 import dev.duo.model.llm.ContentBlock;
 import dev.duo.model.llm.Message;
 import dev.duo.model.session.SessionId;
@@ -134,9 +135,9 @@ public class SkillExample {
 
             // 8. 测试 SkillTool
             System.out.println("\n\n=== 通过 SkillTool 加载 ===\n");
-            var toolResult = skillTool.getDefinition().executor().apply(
+            var toolResult = skillTool.getDefinition().executor().execute(ToolExecution.of(
                     java.util.Map.of("name", "git-commit")
-            );
+            ));
             
             if (!toolResult.isError()) {
                 var block = toolResult.content().get(0);

@@ -1,5 +1,6 @@
 package dev.duo.tool;
 
+import dev.duo.model.llm.ToolExecution;
 import dev.duo.model.session.TodoStatus;
 import dev.duo.util.JsonParser;
 import org.junit.jupiter.api.Test;
@@ -17,14 +18,14 @@ import static org.junit.jupiter.api.Assertions.*;
 class TodoWriteToolTest {
 
     @Test
-    void testExecute_withNestedArgs_thenRecordsTodos() {
+    void testExecute_withNestedArgs_thenRecordsTodos() throws Exception {
         var tool = new TodoWriteTool();
         var json = "{\"todos\": [{\"content\": \"买牛奶\", \"status\": \"pending\"}, "
                 + "{\"content\": \"写报告\", \"status\": \"in_progress\"}]}";
 
         @SuppressWarnings("unchecked")
         var args = (Map<String, Object>) JsonParser.parse(json);
-        var result = tool.getDefinition().executor().apply(args);
+        var result = tool.getDefinition().executor().execute(ToolExecution.of(args));
         printResult("write nested todos", result);
 
         assertFalse(result.isError(), result.content().getFirst().toString());
@@ -37,9 +38,9 @@ class TodoWriteToolTest {
     }
 
     @Test
-    void testExecute_whenTodosMissing_thenReturnsHint() {
+    void testExecute_whenTodosMissing_thenReturnsHint() throws Exception {
         var tool = new TodoWriteTool();
-        var result = tool.getDefinition().executor().apply(Map.of());
+        var result = tool.getDefinition().executor().execute(ToolExecution.of(Map.of()));
         printResult("missing todos", result);
         // 业务性提示（非系统异常），isError 为 false，但内容应说明原因
         assertFalse(result.isError());
@@ -47,18 +48,18 @@ class TodoWriteToolTest {
     }
 
     @Test
-    void testExecute_whenCalledAgain_thenReplacesList() {
+    void testExecute_whenCalledAgain_thenReplacesList() throws Exception {
         var tool = new TodoWriteTool();
         @SuppressWarnings("unchecked")
         var args1 = (Map<String, Object>) JsonParser.parse(
                 "{\"todos\":[{\"content\":\"a\",\"status\":\"pending\"}]}");
-        tool.getDefinition().executor().apply(args1);
+        tool.getDefinition().executor().execute(ToolExecution.of(args1));
 
         @SuppressWarnings("unchecked")
         var args2 = (Map<String, Object>) JsonParser.parse(
                 "{\"todos\":[{\"content\":\"b\",\"status\":\"pending\"},"
                         + "{\"content\":\"c\",\"status\":\"pending\"}]}" );
-        var result = tool.getDefinition().executor().apply(args2);
+        var result = tool.getDefinition().executor().execute(ToolExecution.of(args2));
         printResult("replace todo list", result);
 
         var todos = tool.getTodos();
@@ -68,7 +69,7 @@ class TodoWriteToolTest {
     }
 
     @Test
-    void testExecute_withPipelineGeneratedArgs_thenRecordsAllTodos() {
+    void testExecute_withPipelineGeneratedArgs_thenRecordsAllTodos() throws Exception {
         // 回归：模拟 DeepSeek 实际传回的 arguments 字符串（曾是参数解析 bug 导致记 0 条的场景）
         var tool = new TodoWriteTool();
         var parsed = JsonParser.parse("{\"todos\":[{\"content\":\"买牛奶\",\"status\":\"pending\"},"
@@ -78,7 +79,7 @@ class TodoWriteToolTest {
 
         @SuppressWarnings("unchecked")
         var args = (Map<String, Object>) parsed;
-        var result = tool.getDefinition().executor().apply(args);
+        var result = tool.getDefinition().executor().execute(ToolExecution.of(args));
         printResult("pipeline generated todos", result);
 
         assertFalse(result.isError(), result.content().getFirst().toString());
@@ -89,13 +90,13 @@ class TodoWriteToolTest {
     }
 
     @Test
-    void testExecute_withInvalidStatus_thenSkipsItem() {
+    void testExecute_withInvalidStatus_thenSkipsItem() throws Exception {
         var tool = new TodoWriteTool();
         @SuppressWarnings("unchecked")
         var args = (Map<String, Object>) JsonParser.parse(
                 "{\"todos\":[{\"content\":\"有效\",\"status\":\"pending\"},"
                         + "{\"content\":\"无效状态\",\"status\":\"done\"}]}");
-        var result = tool.getDefinition().executor().apply(args);
+        var result = tool.getDefinition().executor().execute(ToolExecution.of(args));
         printResult("invalid status", result);
 
         assertFalse(result.isError());

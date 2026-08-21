@@ -33,17 +33,17 @@ public class Inbox {
     }
 
     /** 等待单个轮次的提示。 */
-    public List<Message> nextTurn() {
+    public synchronized List<Message> nextTurn() {
         return Collections.unmodifiableList(state.get(InboxTarget.NEXT_TURN));
     }
 
     /** 等待下一个 step 边界的输入。 */
-    public List<Message> nextStep() {
+    public synchronized List<Message> nextStep() {
         return Collections.unmodifiableList(state.get(InboxTarget.NEXT_STEP));
     }
 
     /** 任一待处理消息列表是否包含工作。 */
-    public boolean hasPending() {
+    public synchronized boolean hasPending() {
         return !state.get(InboxTarget.NEXT_TURN).isEmpty()
                 || !state.get(InboxTarget.NEXT_STEP).isEmpty();
     }
@@ -51,7 +51,7 @@ public class Inbox {
     /**
      * 耐久地取消所有待处理输入，先清除 next-step，再清除 next-turn。
      */
-    public void clear() {
+    public synchronized void clear() {
         state.get(InboxTarget.NEXT_STEP).clear();
         state.get(InboxTarget.NEXT_TURN).clear();
     }
@@ -61,7 +61,7 @@ public class Inbox {
      * @param target 是否也消耗一个排队的轮次
      * @return next-step 输入，后跟排队的轮次（如果请求了）
      */
-    public List<Message> claim(InboxTarget target) {
+    public synchronized List<Message> claim(InboxTarget target) {
         var claimed = new ArrayList<>(state.get(InboxTarget.NEXT_STEP));
         state.get(InboxTarget.NEXT_STEP).clear();
 
@@ -80,7 +80,7 @@ public class Inbox {
      * @param target 要扩展的待处理列表
      * @param message 要追加的消息
      */
-    public void append(InboxTarget target, Message message) {
+    public synchronized void append(InboxTarget target, Message message) {
         state.get(target).addLast(message);
     }
 
@@ -89,7 +89,7 @@ public class Inbox {
      * @param target 要扩展的待处理列表
      * @param message 要插入的消息
      */
-    public void prepend(InboxTarget target, Message message) {
+    public synchronized void prepend(InboxTarget target, Message message) {
         state.get(target).addFirst(message);
     }
 
@@ -99,7 +99,7 @@ public class Inbox {
      * @param newMessage 替换消息
      * @return 消息是否仍在待处理中
      */
-    public boolean replace(MessageId messageId, Message newMessage) {
+    public synchronized boolean replace(MessageId messageId, Message newMessage) {
         var location = locate(messageId);
         if (location == null) {
             return false;
@@ -113,7 +113,7 @@ public class Inbox {
      * @param messageId 要移除的待处理消息标识
      * @return 消息是否仍在待处理中
      */
-    public boolean remove(MessageId messageId) {
+    public synchronized boolean remove(MessageId messageId) {
         var location = locate(messageId);
         if (location == null) {
             return false;
@@ -122,7 +122,7 @@ public class Inbox {
         return true;
     }
 
-    private MessageLocation locate(MessageId messageId) {
+    private synchronized MessageLocation locate(MessageId messageId) {
         for (var target : List.of(InboxTarget.NEXT_TURN, InboxTarget.NEXT_STEP)) {
             var list = state.get(target);
             for (int i = 0; i < list.size(); i++) {

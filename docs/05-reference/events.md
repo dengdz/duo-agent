@@ -41,7 +41,7 @@
 |------|----------|---------|------|
 | `user/message` | `SessionEventUserMessage` | `message: UserMessage` 🟦 | 用户输入 / 注入的上下文 |
 | `assistant/message` | `SessionEventAssistantMessage` | `turn`, `step`, `message`, `usage?`, `sourceEventSeqs` 🟦 | 组装完成的完整消息，usage 随行，回链全部 chunk seq |
-| `tool/result` | `SessionEventToolResult` | `turn`, `step`, `message`, `errorName?`, `errorCode?` 🟦 | 工具执行结果 |
+| `tool/result` | `SessionEventToolResult` | `turn`, `step`, `message`, `errorName?`, `errorCode?` 🟦 | 工具执行结果。`errorCode` 为 `"ABORTED"` 时表示执行已调度但被中断（可能有副作用），`"ABORTED_BEFORE_DISPATCH"` 表示尚未调度（无副作用） |
 
 🟦 表面事件携带 `surfaceOp`（`Append` 或 `Replace(start, end)`）。
 

@@ -18,6 +18,12 @@ public record SessionEventToolResult(
     public SessionEventToolResult(int seq, int turn, int step, Message.ToolResultMessage message, SurfaceOp surfaceOp) {
         this(seq, System.currentTimeMillis(), false, surfaceOp, null, turn, step, message, null, null);
     }
+
+    /** 带 errorCode 的便利构造（sentinel 结果的结构化档位标记，如 ABORTED）。 */
+    public SessionEventToolResult(int seq, int turn, int step, Message.ToolResultMessage message,
+                                  SurfaceOp surfaceOp, String errorCode) {
+        this(seq, System.currentTimeMillis(), false, surfaceOp, null, turn, step, message, null, errorCode);
+    }
     @Override
     public String type() {
         return SessionEventTypes.TOOL_RESULT;

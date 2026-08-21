@@ -1,6 +1,7 @@
 package dev.duo.tool;
 
 import dev.duo.model.llm.ToolDefinition;
+import dev.duo.model.llm.ToolExecutor;
 import dev.duo.model.llm.ToolExecutionResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -77,7 +78,7 @@ public class GrepTool {
                         ),
                         "required", List.of(ARG_PATTERN)
                 ),
-                this::execute
+                ToolExecutor.of(this::execute)
         );
     }
 

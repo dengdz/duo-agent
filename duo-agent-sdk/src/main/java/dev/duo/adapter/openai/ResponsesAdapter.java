@@ -1,5 +1,6 @@
 package dev.duo.adapter.openai;
 
+import dev.duo.api.agent.CancellationSignal;
 import dev.duo.api.llm.LlmAdapter;
 import dev.duo.api.llm.StreamCallback;
 import dev.duo.exception.LlmException;
@@ -91,8 +92,14 @@ public final class ResponsesAdapter extends LlmAdapter {
 
     @Override
     public void stream(GenerateOptions options, StreamCallback callback) {
+        stream(options, callback, new CancellationSignal());
+    }
+
+    @Override
+    public void stream(GenerateOptions options, StreamCallback callback, CancellationSignal cancellation) {
         Objects.requireNonNull(options, "options must not be null");
         Objects.requireNonNull(callback, "callback must not be null");
+        Objects.requireNonNull(cancellation, "cancellation must not be null");
 
         if (apiKey == null) {
             callback.onError(new IllegalStateException("Responses 端点鉴权必须设置 apiKey"));
@@ -114,8 +121,12 @@ public final class ResponsesAdapter extends LlmAdapter {
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                     .build();
 
-            SHARED_HTTP_CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofLines())
-                    .thenAccept(response -> {
+            var future = SHARED_HTTP_CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofLines());
+            // 断连监听：cancel(true) 中止底层 exchange 并关闭响应流（正在消费的
+            // forEach 抛异常汇入 onError 路径，迟到回调由调用方 closed 标志挡住）。
+            // 监听器注册时若已取消会立即触发；请求终结时经 whenComplete 摘除
+            var unlisten = cancellation.addListener(() -> future.cancel(true));
+            future.thenAccept(response -> {
                         if (response.statusCode() != HTTP_OK) {
                             var body = response.body().collect(Collectors.joining("\n"));
                             logger.error("Responses API returned {} for model {}\n响应体: {}",
@@ -140,6 +151,13 @@ public final class ResponsesAdapter extends LlmAdapter {
                                 "Responses 请求失败 (model: " + options.model() + "): "
                                         + error.getMessage(), error));
                         return null;
+                    })
+                    .whenComplete((ignored, error) -> {
+                        try {
+                            unlisten.close();
+                        } catch (Exception e) {
+                            logger.debug("摘除断连监听失败（忽略）: {}", e.toString());
+                        }
                     });
         } catch (Exception e) {
             logger.error("Failed to send HTTP request for model: {}", options.model(), e);

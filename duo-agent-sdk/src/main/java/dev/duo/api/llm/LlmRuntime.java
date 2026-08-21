@@ -55,8 +55,22 @@ public class LlmRuntime {
      * @throws IllegalArgumentException 如果该提供方没有注册适配器
      */
     public void stream(GenerateOptions options, StreamCallback callback) {
+        stream(options, callback, new dev.duo.api.agent.CancellationSignal());
+    }
+
+    /**
+     * 取消感知的流式调用：委托 {@link LlmAdapter#stream(GenerateOptions, StreamCallback,
+     * dev.duo.api.agent.CancellationSignal)}，信号触发时由适配器断开连接。
+     * @param options 完全组装好的请求
+     * @param callback 流回调
+     * @param cancellation 取消信号
+     * @throws IllegalArgumentException 如果该提供方没有注册适配器
+     */
+    public void stream(GenerateOptions options, StreamCallback callback,
+                       dev.duo.api.agent.CancellationSignal cancellation) {
         Objects.requireNonNull(options, "options 不能为 null");
         Objects.requireNonNull(callback, "callback 不能为 null");
+        Objects.requireNonNull(cancellation, "cancellation 不能为 null");
 
         var adapter = adapters.get(options.provider());
         if (adapter == null) {
@@ -65,6 +79,6 @@ public class LlmRuntime {
             );
         }
 
-        adapter.stream(options, callback);
+        adapter.stream(options, callback, cancellation);
     }
 }

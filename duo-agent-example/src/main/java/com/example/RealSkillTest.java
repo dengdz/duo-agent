@@ -11,6 +11,7 @@ import dev.duo.core.skill.FilesystemSkillProvider;
 import dev.duo.core.skill.SkillCatalogSection;
 import dev.duo.core.skill.SkillRegistry;
 import dev.duo.core.session.Session;
+import dev.duo.model.llm.ToolExecution;
 import dev.duo.model.llm.ContentBlock;
 import dev.duo.model.llm.Message;
 import dev.duo.model.session.SessionId;
@@ -109,9 +110,9 @@ public class RealSkillTest {
         System.out.println("\n\n=== SkillTool 测试 ===\n");
         
         for (var candidate : candidates) {
-            var result = skillTool.getDefinition().executor().apply(
+            var result = skillTool.getDefinition().executor().execute(ToolExecution.of(
                     java.util.Map.of("name", candidate.name())
-            );
+            ));
             
             if (!result.isError()) {
                 var block = result.content().get(0);

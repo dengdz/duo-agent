@@ -5,11 +5,13 @@ import dev.duo.api.agent.AgentCancelCause;
 import dev.duo.api.agent.AgentHooks;
 import dev.duo.api.agent.AgentOptions;
 import dev.duo.api.agent.AgentStatus;
+import dev.duo.api.agent.CancellationSignal;
 import dev.duo.api.agent.CancelOptions;
 import dev.duo.api.agent.Inbox;
 import dev.duo.api.agent.InboxTarget;
 import dev.duo.api.agent.PreStepDecision;
 import dev.duo.api.agent.RequestErrorAction;
+import dev.duo.api.agent.TurnCancelledException;
 import dev.duo.api.hook.PreStepHook;
 import dev.duo.api.hook.RequestErrorHook;
 import dev.duo.api.hook.RequestHook;
@@ -30,6 +32,7 @@ import dev.duo.model.llm.Message;
 import dev.duo.model.llm.MessageFactory;
 import dev.duo.model.llm.StreamChunk;
 import dev.duo.model.llm.LlmFailure;
+import dev.duo.model.llm.ToolExecution;
 import dev.duo.model.llm.ToolExecutionResult;
 import dev.duo.model.session.SessionEventAssistantChunk;
 import dev.duo.model.session.SessionEventAssistantMessage;
@@ -42,6 +45,7 @@ import dev.duo.model.session.SessionEventTurnStart;
 import dev.duo.model.session.SessionEventUserMessage;
 import dev.duo.model.session.SessionId;
 import dev.duo.model.session.SurfaceOp;
+import dev.duo.model.session.TurnEndCancelCause;
 import dev.duo.model.session.TurnEndReason;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -88,8 +92,17 @@ public class ReactLoopAgent implements Agent {
     private record Running(
             int turn,
             int step,
-            boolean cancelled
+            /** 当前 turn 的取消信号；每个 turn 开始时换新（cancel 只命中活动 turn）。 */
+            CancellationSignal signal
     ) implements Phase {}
+
+    /** sentinel 结果固定文案：模型凭文案区分「副作用可能已发生」与「确定未执行」。 */
+    private static final String ABORTED_MESSAGE = "Error: tool call aborted";
+    private static final String ABORTED_BEFORE_DISPATCH_MESSAGE =
+            "Error: tool call aborted before dispatch";
+    /** sentinel 档位错误码（事件层结构化标记，档位语义见 ADR_004 第 4 节）。 */
+    private static final String ERROR_CODE_ABORTED = "ABORTED";
+    private static final String ERROR_CODE_ABORTED_BEFORE_DISPATCH = "ABORTED_BEFORE_DISPATCH";
 
     // ---- 字段 ----
 
@@ -107,6 +120,8 @@ public class ReactLoopAgent implements Agent {
     private volatile Phase phase;
     private volatile CompletableFuture<Void> activity = CompletableFuture.completedFuture(null);
     private volatile boolean wakeLatch;
+    /** 当前驱动线程：cancel 的 interrupt 通道目标（虚拟线程一次性，无需清理复用）。 */
+    private volatile Thread driverThread;
 
     // ---- 构造 ----
 
@@ -159,25 +174,50 @@ public class ReactLoopAgent implements Agent {
 
     @Override
     public void cancel(AgentCancelCause cause, CancelOptions opts) {
+        CancellationSignal signal;
+        Thread driver;
         synchronized (phaseLock) {
+            // 清待办必须先于发信号：turn 边界的取消靠"新 turn claim 空"终止链
             if (!opts.keepInbox()) inbox.clear();
-            phase = new Idle(lastTurnOf(phase));
+            if (phase instanceof Running r) {
+                signal = r.signal();
+                driver = driverThread;
+            } else {
+                // 无活动 turn：取消是 no-op，不武装后续工作
+                return;
+            }
         }
+        // 锁外执行：abort 同步触发监听器（断连/杀进程等耗时 IO），持 phaseLock
+        // 会阻塞 send/wakeDriver/status 等全部竞争者
+        signal.abort(cause);
+        if (driver != null) {
+            driver.interrupt();
+        }
+        // phase 保持 Running：由驱动线程收敛置 Idle（防双驱动竞态），
+        // 收敛前新 send 落入 wakeLatch 等待
     }
 
     @Override
     public void whenIdle() throws InterruptedException {
-        try {
-            activity.get();
-        } catch (ExecutionException e) {
-            // 活动已完成但有异常，记录异常但不阻塞 whenIdle 返回。
-            // 吞异常处必须留痕：WARN 单行摘要保证任何级别可见，堆栈留在 DEBUG 层。
-            // 注意：cause 必须显式 toString()——SLF4J 会把尾随 Throwable 参数
-            // 特殊处理为异常对象而不填充占位符
-            var cause = e.getCause() != null ? e.getCause() : e;
-            logger.warn("Agent {} 活动以异常结束（whenIdle 忽略并正常返回）: {}",
-                    id, cause.toString());
-            logger.debug("Agent {} 活动异常堆栈", id, e);
+        while (true) {
+            CompletableFuture<Void> current = activity;
+            try {
+                current.get();
+            } catch (ExecutionException e) {
+                // 活动已完成但有异常，记录异常但不阻塞 whenIdle 返回。
+                // 吞异常处必须留痕：WARN 单行摘要保证任何级别可见，堆栈留在 DEBUG 层。
+                // 注意：cause 必须显式 toString()——SLF4J 会把尾随 Throwable 参数
+                // 特殊处理为异常对象而不填充占位符
+                var cause = e.getCause() != null ? e.getCause() : e;
+                logger.warn("Agent {} 活动以异常结束（whenIdle 忽略并正常返回）: {}",
+                        id, cause.toString());
+                logger.debug("Agent {} 活动异常堆栈", id, e);
+            }
+            // 跟随 turn 链重启：activity 已被替换说明收敛时有新工作唤醒，
+            // 继续等新活动直至静止
+            if (activity == current) {
+                return;
+            }
         }
     }
 
@@ -213,9 +253,10 @@ public class ReactLoopAgent implements Agent {
             var p = (Idle) phase;
             var fut = new CompletableFuture<Void>();
             activity = fut;
-            phase = new Running(p.lastTurn + 1, 0, false);
+            phase = new Running(p.lastTurn + 1, 0, new CancellationSignal());
 
             driverExecutor.execute(() -> {
+                driverThread = Thread.currentThread();
                 try {
                     runLoop();
                     fut.complete(null);
@@ -229,13 +270,23 @@ public class ReactLoopAgent implements Agent {
     /** 驱动主循环：反复开 turn。 */
     private void runLoop() throws AgentLoopException {
         try {
-            while (phase instanceof Running r && !r.cancelled) {
-                if (!turn(r)) break;
+            while (phase instanceof Running) {
+                boolean hasMore = turn();
+                if (hasMore) {
+                    // 链续：当前 turn 结束但 inbox 还有待办，递增 turn 号
+                    synchronized (phaseLock) {
+                        int nextTurn = lastTurnOf(phase) + 1;
+                        phase = new Running(nextTurn, 0, new CancellationSignal());
+                    }
+                } else {
+                    break;
+                }
             }
         } finally {
             synchronized (phaseLock) {
                 int last = lastTurnOf(phase);
                 phase = new Idle(last);
+                driverThread = null;
                 if (wakeLatch && inbox.hasPending()) {
                     wakeLatch = false;
                     wakeDriver();
@@ -245,11 +296,23 @@ public class ReactLoopAgent implements Agent {
     }
 
     /** 执行一轮对话。返回 true 表示还有待办需要继续。 */
-    private boolean turn(Running r) throws AgentLoopException {
-        int turn = r.turn;
+    private boolean turn() throws AgentLoopException {
+        int turn = lastTurnOf(phase);
         logger.debug("Agent {} starting turn {}", id, turn);
+        // per-turn 取消信号：cancel 精确命中"正在跑的这个 turn"，
+        // 正常结束后的链续 turn 不被上一个 turn 的取消污染
+        var signal = new CancellationSignal();
+        synchronized (phaseLock) {
+            phase = new Running(turn, 0, signal);
+        }
+        // 消费上一 turn 遗留的中断位：取消路径（streamOnce/工具的 interrupt 处理）
+        // 按惯例重设中断位后再抛 TurnCancelledException，若链继续（keepInbox）
+        // 该残留会立即毒害新 turn 的 barrier.get；驱动线程的 interrupt 源只有
+        // cancel，旧 signal 的中断语义已随 turn 收尾终结
+        if (Thread.interrupted()) {
+            logger.debug("Agent {} turn {} 开始前消费了残留中断位", id, turn);
+        }
         session.append(new SessionEventTurnStart(session.seq(), turn));
-        phase = new Running(turn, 0, false);
 
         TurnEndReason reason = null;
         var target = InboxTarget.NEXT_TURN;
@@ -257,6 +320,7 @@ public class ReactLoopAgent implements Agent {
 
         try {
             while (true) {
+                signal.checkPoint();
                 step++;
                 var claimed = inbox.claim(target);
                 if (claimed.isEmpty()) { reason = new TurnEndReason.Completed(); break; }
@@ -278,7 +342,7 @@ public class ReactLoopAgent implements Agent {
                 }
                 var enteringMessages = ((PreStepDecision.Enter) decision).messages();
 
-                phase = new Running(turn, step, false);
+                phase = new Running(turn, step, signal);
                 session.append(new SessionEventStepStart(session.seq(), turn, step));
 
                 for (var msg : enteringMessages) {
@@ -288,7 +352,7 @@ public class ReactLoopAgent implements Agent {
                 }
 
                 try {
-                    var stepEnd = executeStep(turn, step);
+                    var stepEnd = executeStep(turn, step, signal);
                     if (!(reason instanceof TurnEndReason.MaxTokens)) reason = stepEnd;
                 } finally {
                     session.append(new SessionEventStepEnd(session.seq(), turn, step));
@@ -297,6 +361,10 @@ public class ReactLoopAgent implements Agent {
                 if (reason != null && inbox.nextStep().isEmpty()) break;
                 target = InboxTarget.NEXT_STEP;
             }
+        } catch (TurnCancelledException e) {
+            // 取消是终态语义：记 Aborted 收尾，不作为失败上抛；
+            // 链是否续跑由 finally 后的 hasPending 决定（keepInbox 保留的待办续跑）
+            reason = new TurnEndReason.Aborted(toTurnEndCause(e.cancelCause()));
         } catch (AgentLoopException e) {
             if (reason == null) {
                 reason = new TurnEndReason.Error(new LlmFailure(e.getMessage(), FAILURE_CODE_UNKNOWN));
@@ -320,7 +388,8 @@ public class ReactLoopAgent implements Agent {
     }
 
     /** 执行一次模型调用。返回 step 结束原因。 */
-    private TurnEndReason executeStep(int turn, int step) throws AgentLoopException {
+    private TurnEndReason executeStep(int turn, int step, CancellationSignal signal)
+            throws AgentLoopException, TurnCancelledException {
         var provider = options.provider() != null ? options.provider() : DEFAULT_PROVIDER;
         var model = options.model() != null ? options.model() : DEFAULT_MODEL;
         var requestCtx = new RequestHook.RequestContext(id, turn, step);
@@ -331,13 +400,18 @@ public class ReactLoopAgent implements Agent {
             GenerateOptions request;
             try {
                 request = hooks.dispatchRequest(requestCtx, () -> buildRequest(provider, model));
+            } catch (TurnCancelledException e) {
+                throw e;
             } catch (Exception e) {
                 throw new AgentLoopException("构造模型请求失败", e);
             }
 
             try {
-                streamResult = streamOnce(turn, step, request);
+                streamResult = streamOnce(turn, step, request, signal);
                 break;
+            } catch (TurnCancelledException e) {
+                // 取消先于 request-error 分发：取消是终态，不得被恢复链转为重试
+                throw e;
             } catch (StepLlmException e) {
                 var action = dispatchRequestError(turn, step, e.failure());
                 if (action instanceof RequestErrorAction.Retry) {
@@ -354,7 +428,7 @@ public class ReactLoopAgent implements Agent {
         }
 
         return finalizeStep(turn, step, provider, model,
-                streamResult.assembler(), streamResult.chunkSeqs());
+                streamResult.assembler(), streamResult.chunkSeqs(), signal);
     }
 
     /** 内置 request 行为：从 session 日志派生消息并组装默认请求。 */
@@ -398,9 +472,10 @@ public class ReactLoopAgent implements Agent {
     private record StreamResult(BlockAssembler assembler, List<Integer> chunkSeqs) {
     }
 
-    /** 执行一次流式调用并组装块；失败以 StepLlmException 携带结构化故障抛出。 */
-    private StreamResult streamOnce(int turn, int step, GenerateOptions request)
-            throws StepLlmException {
+    /** 执行一次流式调用并组装块；取消抛 TurnCancelledException，失败以 StepLlmException 携带结构化故障抛出。 */
+    private StreamResult streamOnce(int turn, int step, GenerateOptions request,
+                                     CancellationSignal signal)
+            throws StepLlmException, TurnCancelledException {
         var assembler = new BlockAssembler();
         var barrier = new CompletableFuture<Void>();
         var errorRef = new AtomicReference<Throwable>();
@@ -425,7 +500,7 @@ public class ReactLoopAgent implements Agent {
             public void onComplete() { barrier.complete(null); }
             @Override
             public void onError(Throwable err) { errorRef.set(err); barrier.completeExceptionally(err); }
-        });
+        }, signal);
 
         // 推理模式（DeepSeek-R1 等）思考耗时长，应用 reasoningTimeout（默认 5 分钟）；
         // 普通模式用 llmTimeout（默认 60 秒）。
@@ -438,6 +513,11 @@ public class ReactLoopAgent implements Agent {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             closed.set(true);
+            // 双通道定性：interrupt 唤醒后查取消信号——已取消是终态语义；
+            // 无取消原因的意外中断保持可恢复失败语义（request-error 可重试）
+            if (signal.isCancelled()) {
+                throw new TurnCancelledException(signal.cause());
+            }
             throw new StepLlmException(new LlmFailure("LLM 调用被中断", "INTERRUPTED"), e);
         } catch (ExecutionException e) {
             closed.set(true);
@@ -465,8 +545,9 @@ public class ReactLoopAgent implements Agent {
 
     /** 写入 assistant 消息、判定结束原因并执行工具调用。 */
     private TurnEndReason finalizeStep(int turn, int step, String provider, String model,
-                                       BlockAssembler assembler, List<Integer> chunkSeqs)
-            throws AgentLoopException {
+                                       BlockAssembler assembler, List<Integer> chunkSeqs,
+                                       CancellationSignal signal)
+            throws AgentLoopException, TurnCancelledException {
         var assistantMsg = MessageFactory.createAssistantMessage(assembler.blocks(), provider, model);
         // sourceEventSeqs 回链：完整消息可追溯到拼出它的全部 chunk 事件（token 级回放保真）
         var sourceSeqs = chunkSeqs.stream().mapToInt(Integer::intValue).toArray();
@@ -489,18 +570,34 @@ public class ReactLoopAgent implements Agent {
             return new TurnEndReason.Completed();
         }
 
-        for (var tc : toolCallBlocks) {
+        for (int i = 0; i < toolCallBlocks.size(); i++) {
+            var tc = toolCallBlocks.get(i);
             logger.debug("Executing tool call: {} for agent {}", tc.name(), id);
             session.append(new SessionEventToolCall(
                     session.seq(), turn, step, tc.id(), tc.name(), tc.arguments()
             ));
 
+            // dispatch 前检查点：未启动的调用档位为 BEFORE_DISPATCH（确定无副作用）
+            try {
+                signal.checkPoint();
+            } catch (TurnCancelledException e) {
+                abortRemainingToolCalls(turn, step, toolCallBlocks, i,
+                        ERROR_CODE_ABORTED_BEFORE_DISPATCH, ABORTED_BEFORE_DISPATCH_MESSAGE);
+                throw e;
+            }
+
             ToolExecutionResult result;
             try {
                 var args = parseJsonArgs(tc.arguments());
                 result = hooks.dispatchTool(
-                        new ToolExecutionHook.ToolCallContext(id, turn, step, tc.id(), tc.name(), args),
-                        () -> executeToolSafely(tc.name(), args));
+                        new ToolExecutionHook.ToolCallContext(
+                                id, turn, step, tc.id(), tc.name(), args, signal),
+                        () -> executeToolSafely(tc.name(), new ToolExecution(args, signal)));
+            } catch (TurnCancelledException e) {
+                // dispatch 后打断：body 可能已启动，档位为 ABORTED（副作用可能已发生）
+                abortRemainingToolCalls(turn, step, toolCallBlocks, i,
+                        ERROR_CODE_ABORTED, ABORTED_MESSAGE);
+                throw e;
             } catch (IllegalArgumentException e) {
                 // 参数无效：不进入执行链，直接以错误结果回给模型
                 logger.warn("Tool {} got invalid arguments for agent {}", tc.name(), id, e);
@@ -509,23 +606,78 @@ public class ReactLoopAgent implements Agent {
                 throw new AgentLoopException("工具执行 hook 失败: " + tc.name(), e);
             }
 
-            var toolResultMsg = MessageFactory.createToolResultMessage(tc.id(), result.content(), result.isError());
-            session.append(new SessionEventToolResult(
-                    session.seq(), turn, step, toolResultMsg, new SurfaceOp.Append()
-            ));
+            // 取消取代成功：dispatch 正常返回但取消已到——防止"取消后还把
+            // 成功结果写给模型"的竞态，模型不应基于已取消的执行继续
+            if (result != null && !result.isError() && signal.isCancelled()) {
+                result = sentinelResult(ABORTED_MESSAGE);
+            }
 
-            // 将工具结果注入 inbox 作为 next-step 消息，驱动下一轮 step
-            inbox.append(InboxTarget.NEXT_STEP, toolResultMsg);
+            appendToolResult(turn, step, tc, result, null);
         }
 
         // 有工具调用时，返回 null 表示 step 继续
         return null;
     }
 
+    /**
+     * 取消打断后补齐 sentinel：第 {@code from} 个调用按给定档位写入，
+     * 其后全部按 BEFORE_DISPATCH 写入。
+     * <p>
+     * 配对是协议硬约束——assistant 消息已携带 tool_call blocks，跳过配对的
+     * tool result 会让下一请求被服务端 400；此处保证每个 tool_call 事件
+     * 必有配对 tool_result 事件（含 surfaceOp 投影，下一 turn 模型可见）。
+     * sentinel 不注入 inbox：turn 即将终止，无需驱动 step 循环。
+     * </p>
+     */
+    private void abortRemainingToolCalls(int turn, int step, List<ContentBlock.ToolCall> calls,
+                                         int from, String firstCode, String firstMessage) {
+        for (int i = from; i < calls.size(); i++) {
+            var tc = calls.get(i);
+            if (i > from) {
+                session.append(new SessionEventToolCall(
+                        session.seq(), turn, step, tc.id(), tc.name(), tc.arguments()
+                ));
+            }
+            var code = i == from ? firstCode : ERROR_CODE_ABORTED_BEFORE_DISPATCH;
+            var message = i == from ? firstMessage : ABORTED_BEFORE_DISPATCH_MESSAGE;
+            appendToolResult(turn, step, tc, sentinelResult(message), code);
+        }
+        logger.debug("Agent {} turn {} step {} 取消打断，已为 {} 个工具调用补 sentinel（自 {} 起）",
+                id, turn, step, calls.size() - from, from);
+    }
+
+    /** 写入 tool_result 事件并注入 inbox 驱动下一 step（sentinel 路径 errorCode 非 null 且不注入）。 */
+    private void appendToolResult(int turn, int step, ContentBlock.ToolCall tc,
+                                  ToolExecutionResult result, String errorCode) {
+        var toolResultMsg = MessageFactory.createToolResultMessage(tc.id(), result.content(), result.isError());
+        session.append(new SessionEventToolResult(
+                session.seq(), turn, step, toolResultMsg, new SurfaceOp.Append(), errorCode
+        ));
+        if (errorCode == null) {
+            inbox.append(InboxTarget.NEXT_STEP, toolResultMsg);
+        }
+    }
+
+    /** sentinel 构造：isError 必须为 true（模型将 sentinel 理解为执行失败）。 */
+    private static ToolExecutionResult sentinelResult(String message) {
+        return new ToolExecutionResult(true, List.of(new ContentBlock.Text(message)));
+    }
+
+    /** AgentCancelCause → TurnEndCancelCause 的持久化映射。 */
+    private static TurnEndCancelCause toTurnEndCause(AgentCancelCause cause) {
+        return switch (cause) {
+            case AgentCancelCause.User u -> new TurnEndCancelCause.User();
+            case AgentCancelCause.Parent p -> new TurnEndCancelCause.Parent();
+            case AgentCancelCause.Hook h -> new TurnEndCancelCause.Hook(h.reason());
+            case AgentCancelCause.Disposed d -> new TurnEndCancelCause.Disposed();
+        };
+    }
+
     /** 内置工具执行行为：执行工具并把非法参数转为错误结果。 */
-    private ToolExecutionResult executeToolSafely(String name, Map<String, Object> args) {
+    private ToolExecutionResult executeToolSafely(String name, ToolExecution execution)
+            throws TurnCancelledException {
         try {
-            return toolRegistry.execute(name, args);
+            return toolRegistry.execute(name, execution);
         } catch (IllegalArgumentException e) {
             logger.warn("Tool {} execution failed for agent {}", name, id, e);
             return new ToolExecutionResult(e);

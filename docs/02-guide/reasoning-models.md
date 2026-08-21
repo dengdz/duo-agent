@@ -74,4 +74,4 @@ agent.stream("证明 √2 是无理数").subscribe(new Flow.Subscriber<>() {
 思考作为独立的内容块（`Reasoning`）记录在事件日志中，下一次请求模型时按 DeepSeek API 约定处理。
 
 **中途取消会怎样？**
-`stream()` 订阅者 `cancel()` 停止推送，但底层推理继续执行完毕（不中断 API 调用）。
+`Agent.cancel()` 断开 HTTP 连接，立即停止推理流式返回。断连后服务端推理可能短暂继续（取决于 API 实现），但客户端立即收到取消响应。详见 [取消与中断](../05-reference/limitations.md#取消与中断)。

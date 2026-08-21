@@ -114,7 +114,7 @@ class AgentHooksTest {
 
         var result = hooks.dispatchTool(
                 new ToolExecutionHook.ToolCallContext(AGENT, 1, 1,
-                        new CallId("c1"), "echo", Map.of()),
+                        new CallId("c1"), "echo", Map.of(), new CancellationSignal()),
                 () -> new ToolExecutionResult("tool-body"));
 
         var firstBlock = assertInstanceOf(ContentBlock.Text.class, result.content().getFirst());

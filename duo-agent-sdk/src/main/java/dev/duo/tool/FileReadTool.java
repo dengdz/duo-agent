@@ -1,6 +1,7 @@
 package dev.duo.tool;
 
 import dev.duo.model.llm.ToolDefinition;
+import dev.duo.model.llm.ToolExecutor;
 import dev.duo.model.llm.ToolExecutionResult;
 
 import java.io.IOException;
@@ -37,7 +38,7 @@ public class FileReadTool {
                         ),
                         "required", List.of(ARG_PATH)
                 ),
-                this::execute
+                ToolExecutor.of(this::execute)
         );
     }
 

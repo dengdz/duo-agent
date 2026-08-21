@@ -1,6 +1,7 @@
 package dev.duo.tool;
 
 import dev.duo.core.llm.ToolRegistryImpl;
+import dev.duo.model.llm.ToolExecution;
 import dev.duo.model.llm.ContentBlock;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -21,33 +22,33 @@ class FileToolTest {
     Path tempDir;
 
     @Test
-    void testWriteRead_whenValidPath_thenRoundTripsContent() {
+    void testWriteRead_whenValidPath_thenRoundTripsContent() throws Exception {
         var registry = new ToolRegistryImpl();
         registry.register(new FileWriteTool().getDefinition());
         registry.register(new FileReadTool().getDefinition());
 
         var path = tempDir.resolve("test.txt").toString();
-        var writeResult = registry.execute("file_write", java.util.Map.of(
+        var writeResult = registry.execute("file_write", ToolExecution.of(java.util.Map.of(
                 "path", path,
                 "content", "hello world"
-        ));
+        )));
         printResult("write file", writeResult);
         assertFalse(writeResult.isError(), textOf(writeResult));
 
-        var readResult = registry.execute("file_read", java.util.Map.of("path", path));
+        var readResult = registry.execute("file_read", ToolExecution.of(java.util.Map.of("path", path)));
         printResult("read file", readResult);
         assertFalse(readResult.isError(), textOf(readResult));
         assertEquals("hello world", textOf(readResult));
     }
 
     @Test
-    void testRead_whenFileMissing_thenReturnsError() {
+    void testRead_whenFileMissing_thenReturnsError() throws Exception {
         var registry = new ToolRegistryImpl();
         registry.register(new FileReadTool().getDefinition());
 
-        var result = registry.execute("file_read", java.util.Map.of(
+        var result = registry.execute("file_read", ToolExecution.of(java.util.Map.of(
                 "path", tempDir.resolve("missing.txt").toString()
-        ));
+        )));
         printResult("read missing file", result);
 
         assertFalse(result.isError());
@@ -55,16 +56,16 @@ class FileToolTest {
     }
 
     @Test
-    void testWrite_whenFileExists_thenOverwrites() {
+    void testWrite_whenFileExists_thenOverwrites() throws Exception {
         var registry = new ToolRegistryImpl();
         registry.register(new FileWriteTool().getDefinition());
         registry.register(new FileReadTool().getDefinition());
 
         var path = tempDir.resolve("overwrite.txt").toString();
-        registry.execute("file_write", java.util.Map.of("path", path, "content", "old"));
-        registry.execute("file_write", java.util.Map.of("path", path, "content", "new"));
+        registry.execute("file_write", ToolExecution.of(java.util.Map.of("path", path, "content", "old")));
+        registry.execute("file_write", ToolExecution.of(java.util.Map.of("path", path, "content", "new")));
 
-        var result = registry.execute("file_read", java.util.Map.of("path", path));
+        var result = registry.execute("file_read", ToolExecution.of(java.util.Map.of("path", path)));
         printResult("read overwritten file", result);
         assertEquals("new", textOf(result));
     }

@@ -1,6 +1,7 @@
 package dev.duo.tool;
 
 import dev.duo.model.llm.ToolDefinition;
+import dev.duo.model.llm.ToolExecutor;
 import dev.duo.model.llm.ToolExecutionResult;
 
 import java.io.IOException;
@@ -42,7 +43,7 @@ public class FileWriteTool {
                         ),
                         "required", List.of(ARG_PATH, ARG_CONTENT)
                 ),
-                this::execute
+                ToolExecutor.of(this::execute)
         );
     }
 

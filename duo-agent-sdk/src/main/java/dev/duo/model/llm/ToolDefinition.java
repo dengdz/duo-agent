@@ -16,8 +16,8 @@ public record ToolDefinition(
         String description,
         /** JSON Schema 对象，描述参数结构。 */
         Map<String, Object> parameters,
-        /** 执行函数。 */
-        java.util.function.Function<Map<String, Object>, ToolExecutionResult> executor
+        /** 执行函数（参数 + 取消信号）。 */
+        ToolExecutor executor
 ) {
     public ToolDefinition {
         if (name == null || name.isBlank()) {

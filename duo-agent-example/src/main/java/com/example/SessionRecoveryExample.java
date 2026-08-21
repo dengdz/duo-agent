@@ -14,6 +14,7 @@ import dev.duo.model.llm.MessageFactory;
 import dev.duo.model.llm.MessageSource;
 import dev.duo.model.llm.ToolDefinition;
 import dev.duo.model.llm.ToolExecutionResult;
+import dev.duo.model.llm.ToolExecutor;
 import dev.duo.model.session.SessionEventTurnEnd;
 import dev.duo.model.session.SessionHeader;
 import dev.duo.model.session.SessionId;
@@ -110,7 +111,7 @@ public class SessionRecoveryExample {
         var tools = new ToolRegistryImpl();
         tools.register(new ToolDefinition(
                 "echo", "回显文本", Map.of(),
-                args -> new ToolExecutionResult("echo 工具结果: " + args.get("text"))));
+                ToolExecutor.of(args -> new ToolExecutionResult("echo 工具结果: " + args.get("text")))));
         return new ReactLoopAgent(
                 SESSION_ID,
                 new AgentOptions("mock-echo", "mock-model", null, null),

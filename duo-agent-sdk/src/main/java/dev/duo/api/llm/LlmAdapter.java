@@ -22,4 +22,21 @@ public abstract class LlmAdapter {
      * @param callback 用于接收 chunk 和终结事件的流回调
      */
     public abstract void stream(GenerateOptions options, StreamCallback callback);
+
+    /**
+     * 取消感知的流式调用：信号触发时断开 HTTP 连接（服务器停止生成、
+     * 不再继续消耗 token）。
+     * <p>
+     * 默认实现忽略信号（旧适配器行为不变，取消时仅由调用方丢弃迟到 chunk）；
+     * 长连接适配器应覆写本方法注册 {@link CancellationSignal#addListener}
+     * 关闭响应体流。覆写实现的监听器应幂等。
+     * </p>
+     * @param options 完全组装好的请求
+     * @param callback 用于接收 chunk 和终结事件的流回调
+     * @param cancellation 调用方的取消信号
+     */
+    public void stream(GenerateOptions options, StreamCallback callback,
+                       dev.duo.api.agent.CancellationSignal cancellation) {
+        stream(options, callback);
+    }
 }

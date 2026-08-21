@@ -12,7 +12,7 @@ description: 审查 duo-agent 仓库的代码变更、提交或 PR 时使用。�
 - [README.md](../../../README.md) 与 [docs/](../../../docs/index.md)：对外承诺的行为。**文档与代码不一致按 blocker 处理**（本仓库吃过亏：文档审查曾发现 13 处 API 签名错误）。
 - [docs/05-reference/limitations.md](../../../docs/05-reference/limitations.md)：已知限制清单。变更若消除了某条限制，文档必须同步删除该条。
 - [docs/05-reference/events.md](../../../docs/05-reference/events.md)：15 种事件的字段契约——改事件结构就是改持久化格式。
-- 用户级阿里巴巴 Java 规范 skill（`java-code-review-alibaba`）：命名/异常/并发/日志规约。
+- 通用 Java 规约（命名/异常/并发/日志）检查：交由 `open-code-review` 插件（`ocr` CLI）执行，`ocr review --audience agent -b "<业务上下文>"`；其对 diff 的行级意见与本节其余检查合并报告。
 - [HANDOFF.md](../../../HANDOFF.md)：历史决策记录。与既有决策相抵触时是设计讨论，不是自动否决——但要在报告中显式提出。
 
 ## Blocking 级要求

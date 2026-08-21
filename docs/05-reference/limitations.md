@@ -17,7 +17,6 @@
 ### 流式 API
 
 - **断线不能续传**：`stream()` 是一次性对话流，连接断开即本轮作废。（session seq 已为续传打好基础，见路线图）
-- **取消不中断推理**：订阅 `cancel()` 只停止推送，底层对话轮会执行完毕（仍消耗一次 API 调用）。
 
 ### 尚未接入门面的功能
 
@@ -30,6 +29,14 @@
 | 会话持久化（JsonlSessionPersistence） | 需手动组装底层组件 | [会话持久化](../03-advanced/session-persistence.md) |
 | Skill 系统 | 需手动组装底层组件 | [Skill 系统](../03-advanced/skills.md) |
 
+### 取消与中断
+
+> **0.4.0 完整实现**：双通道取消信号（`CancellationSignal` + `Thread.interrupt()`）贯穿调用链，详见 [ADR_004](../../ADR_004_CANCELLATION_INTERRUPT.md)。
+
+- **取消会中断 LLM stream**：`Agent.cancel()` 调用断连监听器，HTTP 客户端取消挂起的流请求（已调度的工具执行同步收到信号与线程中断）
+- **已调度工具执行不能强制终止**：除 bash（两级 SIGTERM/SIGKILL），自定义工具需自行在 `executor` 内部检查 `execution.cancellation().isCancelled()` 并提前返回或抛 `TurnCancelledException`
+- **取消产生两层 Aborted 哨兵结果**：未调度的 tool_call 配对 `ABORTED_BEFORE_DISPATCH`（无副作用）；已调度但中断的配对 `ABORTED`（可能有副作用）。哨兵事件维持协议要求的 tool_call/tool_result 配对
+
 ### 已定义未接线的事件与类型
 
 - `todo/write`、`request/header`、`request/context` 三种事件无生产者（todo 状态仅存内存）
@@ -37,7 +44,6 @@
 
 ### 其他
 
-- **取消不产生 `Aborted` 事件**：`Agent.cancel()` 为简化实现（清 Inbox 置 Idle，turn 以 `Completed` 收尾）；`Aborted` 原因协议已定义但主流程无生产点
 - **无前缀缓存优化**：请求全量重发（DeepSeek 服务端自动缓存，成本影响有限）
 - **FrontmatterParser 仅支持单行 `key: value`**：不支持嵌套/数组/多行值
 

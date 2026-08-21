@@ -11,6 +11,7 @@ import dev.duo.model.llm.ContentBlock;
 import dev.duo.model.llm.FinishReason;
 import dev.duo.model.llm.StreamChunk;
 import dev.duo.model.llm.TokenUsage;
+import dev.duo.model.llm.ToolExecutor;
 import dev.duo.model.session.SessionEvent;
 import dev.duo.model.session.SessionEventAssistantChunk;
 import dev.duo.model.session.SessionEventAssistantMessage;
@@ -155,9 +156,9 @@ class DuoAgentEventsTest {
                 "回显文本（测试用）",
                 java.util.Map.of("type", "object",
                         "properties", java.util.Map.of("text", java.util.Map.of("type", "string"))),
-                args -> new dev.duo.model.llm.ToolExecutionResult(
+                ToolExecutor.of(args -> new dev.duo.model.llm.ToolExecutionResult(
                         String.valueOf(args.getOrDefault("text", "")))
-        ));
+        )));
 
         var session = new Session(new SessionId("tool-events-test"));
         var agent = new ReactLoopAgent(

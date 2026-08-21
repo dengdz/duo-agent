@@ -1,6 +1,7 @@
 package dev.duo.api.llm;
 
 import dev.duo.model.llm.ToolDefinition;
+import dev.duo.model.llm.ToolExecution;
 import dev.duo.model.llm.ToolExecutionResult;
 
 import java.util.List;
@@ -40,9 +41,12 @@ public interface ToolRegistry {
     /**
      * 执行一个工具。
      * @param name 工具名称
-     * @param args 参数字典
+     * @param execution 参数与取消信号
      * @return 执行结果
      * @throws IllegalArgumentException 如果工具不存在
+     * @throws dev.duo.api.agent.TurnCancelledException 执行被取消
+     *         （工具已清理后抛出，穿透本层不被转为错误结果）
      */
-    ToolExecutionResult execute(String name, Map<String, Object> args);
+    ToolExecutionResult execute(String name, ToolExecution execution)
+            throws dev.duo.api.agent.TurnCancelledException;
 }

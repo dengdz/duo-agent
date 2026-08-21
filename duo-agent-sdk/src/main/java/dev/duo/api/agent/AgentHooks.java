@@ -10,6 +10,7 @@ import dev.duo.model.llm.ToolExecutionResult;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
@@ -139,22 +140,24 @@ public final class AgentHooks {
     /**
      * 分发工具执行链。
      *
-     * @param context 不可变上下文
+     * @param context 不可变上下文（含取消信号）
      * @param inner 内置行为：解析参数并执行工具
      * @return 最终工具结果
+     * @throws dev.duo.api.agent.TurnCancelledException 内置行为被取消时原样穿透
+     *         （由驱动循环转 sentinel，hook 不得将其转为重试或普通错误）
      */
     public ToolExecutionResult dispatchTool(ToolExecutionHook.ToolCallContext context,
-                                            Supplier<ToolExecutionResult> inner) throws Exception {
+                                            Callable<ToolExecutionResult> inner) throws Exception {
         if (toolHooks.isEmpty()) {
-            return inner.get();
+            return inner.call();
         }
         return dispatchToolAt(0, context, inner);
     }
 
     private ToolExecutionResult dispatchToolAt(int index, ToolExecutionHook.ToolCallContext context,
-                                               Supplier<ToolExecutionResult> inner) throws Exception {
+                                               Callable<ToolExecutionResult> inner) throws Exception {
         if (index >= toolHooks.size()) {
-            return inner.get();
+            return inner.call();
         }
         var once = new AtomicBoolean();
         ToolExecutionHook.Chain next = () -> {

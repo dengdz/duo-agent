@@ -15,6 +15,7 @@ import dev.duo.model.llm.MessageFactory;
 import dev.duo.model.llm.MessageSource;
 import dev.duo.model.llm.ToolDefinition;
 import dev.duo.model.llm.ToolExecutionResult;
+import dev.duo.model.llm.ToolExecutor;
 import dev.duo.model.session.SessionEventAssistantMessage;
 import dev.duo.model.session.SessionEventToolResult;
 import dev.duo.model.session.SessionEventTurnEnd;
@@ -55,7 +56,7 @@ public class HookVerificationExample {
         var tools = new ToolRegistryImpl();
         tools.register(new ToolDefinition(
                 "echo", "回显文本", Map.of(),
-                args -> new ToolExecutionResult("echo-tool-body: " + args.get("text"))));
+                ToolExecutor.of(args -> new ToolExecutionResult("echo-tool-body: " + args.get("text")))));
 
         var hooks = AgentHooks.builder()
                 .addPreStepHook((ctx, next) -> {
@@ -93,10 +94,10 @@ public class HookVerificationExample {
         var tools = new ToolRegistryImpl();
         tools.register(new ToolDefinition(
                 "echo", "回显文本", Map.of(),
-                args -> {
+                ToolExecutor.of(args -> {
                     toolExecuted.incrementAndGet();
                     return new ToolExecutionResult("真实工具结果");
-                }));
+                })));
 
         var hooks = AgentHooks.builder()
                 .addToolHook((ctx, next) -> {

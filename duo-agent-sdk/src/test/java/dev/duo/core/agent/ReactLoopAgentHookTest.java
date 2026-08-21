@@ -20,6 +20,7 @@ import dev.duo.model.llm.MessageSource;
 import dev.duo.model.llm.StreamChunk;
 import dev.duo.model.llm.ToolDefinition;
 import dev.duo.model.llm.ToolExecutionResult;
+import dev.duo.model.llm.ToolExecutor;
 import dev.duo.model.session.SessionEventAssistantChunk;
 import dev.duo.model.session.SessionEventStepStart;
 import dev.duo.model.session.SessionEventToolResult;
@@ -166,10 +167,10 @@ class ReactLoopAgentHookTest {
         var tools = new ToolRegistryImpl();
         tools.register(new ToolDefinition(
                 "echo", "回显文本", Map.of(),
-                args -> {
+                ToolExecutor.of(args -> {
                     toolCalls.incrementAndGet();
                     return new ToolExecutionResult("tool-body");
-                }));
+                })));
 
         var hooks = AgentHooks.builder()
                 .addToolHook((ctx, next) -> new ToolExecutionResult("blocked-by-hook"))
@@ -365,10 +366,10 @@ class ReactLoopAgentHookTest {
         var tools = new ToolRegistryImpl();
         tools.register(new ToolDefinition(
                 "echo", "回显文本", Map.of(),
-                args -> {
+                ToolExecutor.of(args -> {
                     toolExecuted.incrementAndGet();
                     return new ToolExecutionResult("secret-raw-value");
-                }));
+                })));
 
         // 放行执行，但把结果替换为脱敏版本（around 包装语义）
         var hooks = AgentHooks.builder()

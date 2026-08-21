@@ -1,7 +1,9 @@
 package dev.duo.core.llm;
 
+import dev.duo.api.agent.TurnCancelledException;
 import dev.duo.api.llm.ToolRegistry;
 import dev.duo.model.llm.ToolDefinition;
+import dev.duo.model.llm.ToolExecution;
 import dev.duo.model.llm.ToolExecutionResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,16 +53,20 @@ public class ToolRegistryImpl implements ToolRegistry {
     }
 
     @Override
-    public ToolExecutionResult execute(String name, Map<String, Object> args) {
+    public ToolExecutionResult execute(String name, ToolExecution execution)
+            throws TurnCancelledException {
         Objects.requireNonNull(name, "name must not be null");
-        Objects.requireNonNull(args, "args must not be null");
-        
+        Objects.requireNonNull(execution, "execution must not be null");
+
         var tool = tools.get(name);
         if (tool == null) {
             throw new IllegalArgumentException("未知工具 \"" + name + "\"");
         }
         try {
-            return tool.executor().apply(args);
+            return tool.executor().execute(execution);
+        } catch (TurnCancelledException e) {
+            // 取消是终态语义：穿透本层由驱动循环转 sentinel，不得降级为普通错误结果
+            throw e;
         } catch (IllegalArgumentException | IllegalStateException e) {
             // 工具参数错误或状态异常，返回给模型让其重试
             logger.debug("Tool {} execution failed with expected error: {}", name, e.getMessage());

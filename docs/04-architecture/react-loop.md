@@ -77,14 +77,21 @@ HTTP 整体：max(llmTimeout, reasoningTimeout) + 1min（防 SSE 长流被掐，
 
 | 原因 | 触发 |
 |------|------|
-| `Completed` | 模型给出无工具调用的回答；`cancel()` 中止活跃 turn 时也以此收尾（当前 cancel 为简化实现，见下） |
-| `Aborted(cause)` | **协议已定义但主流程暂无生产点**（编解码支持，用于旧日志兼容） |
+| `Completed` | 模型给出无工具调用的回答 |
+| `Aborted(cause)` | `Agent.cancel()` 中断当前 turn（详见 [ADR_004](../../ADR_004_CANCELLATION_INTERRUPT.md)） |
 | `Blocked` | pre-step hook 拒绝输入 |
 | `Error(LlmFailure)` | 模型调用最终失败（重试耗尽等） |
 | `MaxTokens` | 输出达到 token 上限 |
 | `Interrupted` | 进程崩溃后的恢复闭合标记（仅持久化 load 时合成） |
 
-> ⚠️ 当前的 `Agent.cancel(cause, options)` 是简化实现：清空 Inbox（除非 `CancelOptions.keepInbox()`）并直接置 Idle——进行中的 turn 以 `Completed` 收尾，**不产生 `Aborted` 事件**。完整的取消传播（活跃 turn 中止 + `Aborted` 原因落日志）在路线图中。
+> ✅ **0.4.0 起完整实现取消打断**：
+> - 双通道传播：`CancellationSignal` + `Thread.interrupt()`
+> - 中断 HTTP stream：断连监听器立即触发
+> - 终止 bash 进程：两级 kill (SIGTERM → 3s → SIGKILL)
+> - 哨兵结果配对：`ABORTED` / `ABORTED_BEFORE_DISPATCH`
+> - Turn 收尾：记录 `Aborted(reason)`
+> 
+> 详见 [ADR_004](../../ADR_004_CANCELLATION_INTERRUPT.md) 和 [取消与中断限制](../05-reference/limitations.md#取消与中断)
 
 ## 输入路由（Inbox）
 
