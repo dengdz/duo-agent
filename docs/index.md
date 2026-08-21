@@ -63,7 +63,7 @@ String response = agent.call("列出当前目录的 Java 文件");
 | 章节 | 内容 |
 |------|------|
 | [入门](01-getting-started/introduction.md) | duo-agent 是什么、核心特性、适用场景 |
-| [指南](02-guide/chat-api.md) | 对话 API、流式、工具、自定义工具、推理模型、SSE 桥接 |
+| [指南](02-guide/chat-api.md) | 对话 API、流式、多厂商接入、工具、自定义工具、推理模型、SSE 桥接 |
 | [高级](03-advanced/hooks.md) | Hook 扩展、自动重试、上下文压缩、持久化、Skill 系统 |
 | [架构](04-architecture/overview.md) | 分层设计、事件溯源、ReAct 循环 |
 | [参考](05-reference/events.md) | 事件类型速查、已知限制与路线图 |
@@ -72,4 +72,4 @@ String response = agent.call("列出当前目录的 Java 文件");
 
 - [项目 README](https://github.com/dengdz/duo-agent) —— 特性亮点
 - [示例程序](https://github.com/dengdz/duo-agent/tree/main/duo-agent-example) —— 16 个可运行示例
-- 240 个单元测试覆盖全部核心功能
+- 284 个单元测试覆盖全部核心功能

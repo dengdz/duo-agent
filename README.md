@@ -5,11 +5,12 @@
 ## ✨ 特性
 
 - 🚀 **极简 API** - 两层抽象：Model 管模型配置，Agent 管会话与工具
+- 🌐 **多厂商** - 三协议适配：OpenAI 兼容 / Anthropic（智谱 GLM）/ Responses
 - 🔧 **内置工具链** - bash、文件操作、代码编辑、搜索等
 - 🔌 **零依赖** - 纯 Java 21，无第三方依赖
-- 🧪 **高质量** - 240 个单元测试，100% 工具链稳定性
+- 🧪 **高质量** - 284 个单元测试，100% 工具链稳定性
 - 🎯 **ReAct 架构** - 成熟的推理-行动循环模式
-- 🧠 **推理模式** - 支持 DeepSeek-R1 等深度推理模型
+- 🧠 **推理模式** - 支持深度推理模型（reasoning / thinking / effort）
 
 ## 🚀 快速开始（5 分钟）
 
@@ -20,13 +21,13 @@
 <dependency>
     <groupId>dev.duo</groupId>
     <artifactId>duo-agent-sdk</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
 </dependency>
 ```
 
 **Gradle:**
 ```gradle
-implementation 'dev.duo:duo-agent-sdk:0.2.0'
+implementation 'dev.duo:duo-agent-sdk:0.3.0'
 ```
 
 ### 2. 设置 API Key
@@ -100,6 +101,36 @@ var agent = DuoAgent.builder()
 
 > **注意：** 推理模型建议不要设置 `maxOutputTokens`，由模型决定输出长度，
 > 避免 `<think>` 推理过程占用 token 导致回答被截断。
+
+### 多厂商接入（0.3.0）
+
+按 API 协议格式选择 Model 类型，厂商只是配置值：
+
+```java
+// 智谱 GLM（Anthropic 兼容端点）
+DuoModel glm = AnthropicModel.builder()
+        .baseUrl("https://open.bigmodel.cn/api/anthropic")
+        .apiKey(System.getenv("ZHIPU_API_KEY"))
+        .model("glm-4.6")
+        .enableReasoning(true)
+        .build();
+
+// Ollama 本地部署（无鉴权）
+DuoModel local = ChatCompletionsModel.builder()
+        .baseUrl("http://localhost:11434/v1")
+        .model("qwen3:32b")
+        .build();
+
+// OpenAI 官方（Responses 格式，gpt-5 / o 系列）
+DuoModel gpt = ResponsesModel.builder()
+        .apiKey(System.getenv("OPENAI_API_KEY"))
+        .model("gpt-5.2")
+        .enableReasoning(true)
+        .reasoningEffort("high")
+        .build();
+```
+
+三协议对照与接入细节见[多厂商接入指南](docs/02-guide/multi-provider.md)。
 
 ### 完整配置
 
@@ -417,7 +448,7 @@ Session session = agent.getSession();
 duo-agent/
 ├── duo-agent-sdk/          # SDK 核心模块
 │   ├── src/main/java/      # SDK 源码
-│   └── src/test/java/      # SDK 单元测试（240 个测试）
+│   └── src/test/java/      # SDK 单元测试（284 个测试）
 ├── duo-agent-example/      # 示例/调试模块
 │   └── src/main/java/      # 使用示例
 └── pom.xml                 # 父 POM
@@ -537,7 +568,7 @@ var agent = new ReactLoopAgent(...);
 ### 运行单元测试
 
 ```bash
-# 运行全部测试（240 个）
+# 运行全部测试（284 个）
 mvn test
 
 # 运行 SDK 测试
@@ -578,12 +609,13 @@ var agent = DuoAgent.builder()
 
 ## ⚠️ 已知限制
 
-- **Anthropic 格式未支持** - 目前仅提供 DeepSeek（OpenAI 兼容格式）的
-  `DuoModel` 实现，Anthropic 格式计划在未来版本支持
+- 无重大限制。0.3.0 起提供三种协议 Model：`ChatCompletionsModel`（一切
+  OpenAI 兼容端点）、`AnthropicModel`（智谱 GLM / Claude）、`ResponsesModel`
+  （OpenAI 官方 gpt-5 / o 系列）——见[多厂商接入指南](docs/02-guide/multi-provider.md)
 
 ## 📊 质量保证
 
-- ✅ **240 个单元测试** - 覆盖核心功能（含流式 API 测试）
+- ✅ **284 个单元测试** - 覆盖核心功能（含流式 API 测试）
 - ✅ **四轮 AI 代码审查** - 45 个问题全部修复
 - ✅ **100% 工具链稳定性** - 经过 DeepSeek API 实测验证
 - ✅ **零依赖** - 纯 Java 21，无第三方库

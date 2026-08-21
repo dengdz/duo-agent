@@ -6,7 +6,9 @@
 
 ### API 格式
 
-- **目前仅提供 DeepSeek（OpenAI 兼容格式）的 `DuoModel` 实现**（API 格式由 Model 实现决定，不再是 Builder 参数）。通过自定义 `baseUrl` 可对接 OpenAI 兼容的自部署端点（Ollama、vLLM 等）；Anthropic（Claude 原生协议）的 DuoModel 实现尚未完成。
+- 0.3.0 起提供三种协议的 `DuoModel` 实现：`ChatCompletionsModel`（一切 OpenAI 兼容端点）、`AnthropicModel`（Anthropic Messages 协议，含智谱/DeepSeek 兼容端点与企业中转站）、`ResponsesModel`（OpenAI Responses 协议）。接入方式见[多厂商接入指南](../02-guide/multi-provider.md)。
+- **DeepSeek 的 Responses 兼容端点思考不可见**：端点忽略 `reasoning.summary` 参数，思考增量不透出（Chat Completions 与 Anthropic 端点均正常透出）。
+- **OpenAI 官方端点未实机验证**：`ResponsesModel` 经协议级测试与 DeepSeek 兼容端点实测，OpenAI 官方端点待持有 key 的用户验证。
 
 ### 线程模型
 
