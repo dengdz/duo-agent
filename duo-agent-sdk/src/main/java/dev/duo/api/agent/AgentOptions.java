@@ -35,9 +35,12 @@ public record AgentOptions(
      * Compact constructor 验证所有参数。
      */
     public AgentOptions {
-        // 验证 apiFormat
-        if (apiFormat != null && !apiFormat.equals("openai") && !apiFormat.equals("anthropic")) {
-            throw new IllegalArgumentException("apiFormat 必须是 'openai' 或 'anthropic'，当前值: " + apiFormat);
+        // 验证 apiFormat：与各协议 Model 的 getApiFormat() 返回值保持一致
+        //（openai=Chat Completions、anthropic=Messages、responses=Responses）
+        if (apiFormat != null && !apiFormat.equals("openai") && !apiFormat.equals("anthropic")
+                && !apiFormat.equals("responses")) {
+            throw new IllegalArgumentException(
+                    "apiFormat 必须是 'openai'、'anthropic' 或 'responses'，当前值: " + apiFormat);
         }
         
         if (llmTimeout != null && (llmTimeout.isZero() || llmTimeout.isNegative())) {

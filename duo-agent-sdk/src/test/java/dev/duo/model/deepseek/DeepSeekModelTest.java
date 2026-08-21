@@ -1,6 +1,6 @@
 package dev.duo.model.deepseek;
 
-import dev.duo.adapter.deepseek.DeepSeekAdapter;
+import dev.duo.adapter.openai.ChatCompletionsAdapter;
 import dev.duo.api.DuoModel;
 import org.junit.jupiter.api.Test;
 
@@ -111,15 +111,19 @@ class DeepSeekModelTest {
     }
 
     @Test
-    void createAdapterShouldReturnDeepSeekAdapter() {
+    void createAdapterShouldReturnChatCompletionsAdapterWithDeepSeekPreset() {
         var model = DeepSeekModel.builder()
                 .apiKey(TEST_KEY)
                 .model("deepseek-chat")
                 .build();
 
-        assertInstanceOf(DeepSeekAdapter.class, model.createAdapter(Duration.ofMinutes(6)),
-                "带参工厂应产出 DeepSeek 适配器");
-        assertInstanceOf(DeepSeekAdapter.class, model.createAdapter(),
-                "无参工厂应产出 DeepSeek 适配器");
+        // 0.3.0 起 DeepSeek 预设复用 Chat Completions 协议适配器
+        //（含 reasoning_content 字段变体），不再有独立的 DeepSeek 协议实现
+        assertInstanceOf(ChatCompletionsAdapter.class, model.createAdapter(Duration.ofMinutes(6)),
+                "带参工厂应产出 Chat Completions 协议适配器");
+        assertNotSame(model.createAdapter(Duration.ofMinutes(6)), model.createAdapter(Duration.ofMinutes(6)),
+                "带参工厂每次组装创建独立适配器");
+        assertSame(model.createAdapter(), model.createAdapter(),
+                "无参工厂（Model 自用）复用同一适配器实例");
     }
 }

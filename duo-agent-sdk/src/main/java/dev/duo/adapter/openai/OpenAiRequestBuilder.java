@@ -1,6 +1,7 @@
-package dev.duo.adapter.deepseek;
+package dev.duo.adapter.openai;
 
 import dev.duo.model.llm.ContentBlock;
+import dev.duo.util.JsonCodec;
 import dev.duo.model.llm.GenerateOptions;
 import dev.duo.model.llm.Message;
 
@@ -9,22 +10,24 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * DeepSeek 请求构建器。
+ * OpenAI Chat Completions 请求构建器。
  * <p>
- * 负责将 {@link GenerateOptions} 序列化为 DeepSeek API 请求 JSON 字符串。
+ * 将 {@link GenerateOptions} 序列化为 Chat Completions 协议请求 JSON。
+ * 该格式是 DeepSeek、Kimi、通义、Ollama、vLLM 等厂商的事实标准，
+ * 泛化自 DeepSeek 协议实现，请求结构与厂商无关。
  * </p>
  *
  * @author zhangyl
- * @date 2026-08-18
+ * @date 2026-08-21
  */
-class DeepSeekRequestBuilder {
+final class OpenAiRequestBuilder {
 
-    private DeepSeekRequestBuilder() {
+    private OpenAiRequestBuilder() {
         // 工具类，禁止实例化
     }
 
     /**
-     * 构建 DeepSeek API 请求体。
+     * 构建 Chat Completions 请求体。
      *
      * @param options 生成选项
      * @return JSON 字符串
@@ -37,7 +40,7 @@ class DeepSeekRequestBuilder {
                 + (options.tools() != null ? options.tools().size() * 300 : 0);
         var sb = new StringBuilder(estimatedCapacity);
         sb.append("{\n");
-        sb.append("  \"model\": \"").append(escapeJson(options.model())).append("\",\n");
+        sb.append("  \"model\": \"").append(JsonCodec.escapeJson(options.model())).append("\",\n");
         sb.append("  \"stream\": true,\n");
         sb.append("  \"messages\": [\n");
 
@@ -46,7 +49,7 @@ class DeepSeekRequestBuilder {
         // system
         if (options.system() != null && !options.system().isBlank()) {
             messages.add("      {\"role\": \"system\", \"content\": \""
-                    + escapeJson(options.system()) + "\"}");
+                    + JsonCodec.escapeJson(options.system()) + "\"}");
         }
 
         // conversation messages
@@ -55,7 +58,7 @@ class DeepSeekRequestBuilder {
                 case Message.UserMessage userMsg -> {
                     var text = flattenText(userMsg.content());
                     messages.add("      {\"role\": \"user\", \"content\": \""
-                            + escapeJson(text) + "\"}");
+                            + JsonCodec.escapeJson(text) + "\"}");
                 }
                 case Message.AssistantMessage asstMsg -> {
                     var text = flattenText(asstMsg.content());
@@ -70,20 +73,20 @@ class DeepSeekRequestBuilder {
                                 toolCallsJson.append(", ");
                             }
                             first = false;
-                            toolCallsJson.append("{\"id\": \"").append(escapeJson(tc.id().value()))
+                            toolCallsJson.append("{\"id\": \"").append(JsonCodec.escapeJson(tc.id().value()))
                                     .append("\", \"type\": \"function\", \"function\": {\"name\": \"")
-                                    .append(escapeJson(tc.name()))
+                                    .append(JsonCodec.escapeJson(tc.name()))
                                     .append("\", \"arguments\": \"")
-                                    .append(escapeJson(tc.arguments()))
+                                    .append(JsonCodec.escapeJson(tc.arguments()))
                                     .append("\"}}");
                         }
                         toolCallsJson.append("]");
                         messages.add("      {\"role\": \"assistant\", \"content\": \""
-                                + escapeJson(text) + "\", \"tool_calls\": " + toolCallsJson + "}");
+                                + JsonCodec.escapeJson(text) + "\", \"tool_calls\": " + toolCallsJson + "}");
                     } else {
                         // 无工具调用，只有文本内容
                         messages.add("      {\"role\": \"assistant\", \"content\": \""
-                                + escapeJson(text) + "\"}");
+                                + JsonCodec.escapeJson(text) + "\"}");
                     }
                 }
                 case Message.ToolResultMessage toolMsg -> {
@@ -92,25 +95,26 @@ class DeepSeekRequestBuilder {
                         var text = flattenText(tr.content());
                         messages.add("      {\"role\": \"tool\", \"tool_call_id\": \""
                                 + tr.toolCallId() + "\", \"content\": \""
-                                + escapeJson(text.isEmpty() ? "(no output)" : text) + "\"}");
+                                + JsonCodec.escapeJson(text.isEmpty() ? "(no output)" : text) + "\"}");
                     }
                 }
-                default -> {}
+                default -> {
+                }
             }
         }
 
         sb.append(String.join(",\n", messages));
         sb.append("\n    ],\n");
 
-        // tools
+        // tools（Chat Completions 嵌套格式：{type:"function", function:{...}}）
         if (options.tools() != null && !options.tools().isEmpty()) {
             sb.append("  \"tools\": [\n");
             var toolEntries = new ArrayList<String>();
             for (var tool : options.tools()) {
                 toolEntries.add("    {\"type\": \"function\", \"function\": {"
-                        + "\"name\": \"" + escapeJson(tool.name()) + "\", "
-                        + "\"description\": \"" + escapeJson(tool.description()) + "\", "
-                        + "\"parameters\": " + toJson(tool.parameters())
+                        + "\"name\": \"" + JsonCodec.escapeJson(tool.name()) + "\", "
+                        + "\"description\": \"" + JsonCodec.escapeJson(tool.description()) + "\", "
+                        + "\"parameters\": " + JsonCodec.toJson(tool.parameters())
                         + "}}");
             }
             sb.append(String.join(",\n", toolEntries));
@@ -123,9 +127,9 @@ class DeepSeekRequestBuilder {
         if (options.maxTokens() != null) {
             sb.append("  \"max_tokens\": ").append(options.maxTokens()).append(",\n");
         }
-        
-        // DeepSeek-R1 推理模式无需额外参数，模型本身支持
-        // 如果未来需要配置推理参数（如 reasoning_effort），在这里添加
+
+        // 推理模式说明：DeepSeek-R1 等模型经 Chat Completions 无需显式推理参数，
+        // 思考内容由响应的 reasoning 字段透出（见 OpenAiSseParser 的 reasoningContentField）
 
         // 去掉末尾的逗号
         var result = sb.toString();
@@ -139,7 +143,9 @@ class DeepSeekRequestBuilder {
     private static String flattenText(List<ContentBlock> blocks) {
         var sb = new StringBuilder();
         for (var block : blocks) {
-            if (block instanceof ContentBlock.Text t) sb.append(t.text());
+            if (block instanceof ContentBlock.Text t) {
+                sb.append(t.text());
+            }
         }
         return sb.toString();
     }
@@ -154,43 +160,4 @@ class DeepSeekRequestBuilder {
         return toolCalls;
     }
 
-    private static String escapeJson(String s) {
-        return s.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
-    }
-
-    /** 将 Map 序列化为 JSON 字符串。 */
-    @SuppressWarnings("unchecked")
-    private static String toJson(Object value) {
-        if (value == null) return "null";
-        if (value instanceof String s) return "\"" + escapeJson(s) + "\"";
-        if (value instanceof Number || value instanceof Boolean) return value.toString();
-        if (value instanceof Map<?, ?> map) {
-            var sb = new StringBuilder("{");
-            var first = true;
-            for (var entry : map.entrySet()) {
-                if (!first) sb.append(", ");
-                first = false;
-                sb.append("\"").append(escapeJson(entry.getKey().toString())).append("\": ");
-                sb.append(toJson(entry.getValue()));
-            }
-            sb.append("}");
-            return sb.toString();
-        }
-        if (value instanceof Iterable<?> iter) {
-            var sb = new StringBuilder("[");
-            var first = true;
-            for (var item : iter) {
-                if (!first) sb.append(", ");
-                first = false;
-                sb.append(toJson(item));
-            }
-            sb.append("]");
-            return sb.toString();
-        }
-        return "\"" + escapeJson(value.toString()) + "\"";
-    }
 }

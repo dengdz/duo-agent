@@ -1,4 +1,4 @@
-package dev.duo.adapter.deepseek;
+package dev.duo.adapter.openai;
 
 import dev.duo.api.llm.StreamCallback;
 import dev.duo.model.llm.ContentBlock;
@@ -7,24 +7,33 @@ import dev.duo.model.llm.StreamChunk;
 import dev.duo.model.llm.TokenUsage;
 import dev.duo.model.session.SessionEventTypes;
 import dev.duo.util.CallId;
+import dev.duo.util.JsonFieldExtractor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * DeepSeek SSE 流解析器。
+ * OpenAI Chat Completions SSE 流解析器。
  * <p>
- * 负责解析 DeepSeek API 返回的 SSE 流数据，提取文本 delta、工具调用 delta 并转换为 StreamChunk。
+ * 解析 Chat Completions 兼容端点的 SSE 流，提取思考增量（协议变体字段）、
+ * 文本 delta、工具调用 delta、usage 与 finish_reason，转换为 {@link StreamChunk}。
+ * 泛化自 DeepSeek 协议实现；厂商对流式思考字段的命名差异
+ * （如 DeepSeek 的 {@code reasoning_content}）经构造参数 {@code reasoningContentField}
+ * 参数化，null 表示该端点不透出流式思考。
+ * </p>
+ * <p>
+ * 块索引仅用于关联交错的 delta（{@link StreamChunk} 契约），无顺序语义：
+ * 文本块固定 0、工具调用块固定 1（与泛化前行为一致），思考块固定 2。
  * </p>
  *
  * @author zhangyl
- * @date 2026-08-18
+ * @date 2026-08-21
  */
-class DeepSeekSseParser {
+final class OpenAiSseParser {
 
-    private static final Logger logger = LoggerFactory.getLogger(DeepSeekSseParser.class);
+    private static final Logger logger = LoggerFactory.getLogger(OpenAiSseParser.class);
 
     // SSE 协议常量
-    private static final String SSE_DATA_PREFIX = "data: ";
+    private static final String SSE_DATA_PREFIX = "data:";
     private static final String SSE_DONE_MARKER = "[DONE]";
 
     // JSON 常量
@@ -33,28 +42,53 @@ class DeepSeekSseParser {
     // 块索引常量
     private static final int TEXT_BLOCK_INDEX = 0;
     private static final int TOOL_CALL_BLOCK_INDEX = 1;
+    private static final int REASONING_BLOCK_INDEX = 2;
+
+    /** 流式思考的 delta 字段名（如 "reasoning_content"）；null 表示不解析思考流。 */
+    private final String reasoningContentField;
+
+    /** 解析器的构造入口在 {@link OpenAiSseParser#create(String)}。 */
+    private OpenAiSseParser(String reasoningContentField) {
+        this.reasoningContentField = reasoningContentField;
+    }
+
+    /**
+     * 创建解析器。
+     *
+     * @param reasoningContentField 思考增量的响应字段名（null 表示端点不透出流式思考）
+     * @return 解析器实例
+     */
+    static OpenAiSseParser create(String reasoningContentField) {
+        return new OpenAiSseParser(reasoningContentField);
+    }
 
     // ---- 流式解析状态（每次 reset() 后重置）----
 
-    /** 是否是第一个文本块（用于判断是否需要发送 BlockStart）。*/
+    /** 是否是第一个文本块（用于判断是否需要发送 BlockStart）。 */
     private boolean firstChunk = true;
 
-    /** 是否包含工具调用（用于切换文本块到工具调用块）。*/
+    /** 思考块是否已开始（用于判断是否需要发送 BlockStart）。 */
+    private boolean reasoningBlockStarted = false;
+
+    /** 思考内容累积缓冲区（用于组装 BlockEnd 载荷）。 */
+    private final StringBuilder reasoningBuffer = new StringBuilder();
+
+    /** 是否包含工具调用（用于切换文本块到工具调用块）。 */
     private boolean hasToolCalls = false;
 
-    /** 工具调用块是否已开始（避免重复发送 BlockStart）。*/
+    /** 工具调用块是否已开始（避免重复发送 BlockStart）。 */
     private boolean toolCallBlockStarted = false;
 
-    /** 当前工具调用的 ID。*/
+    /** 当前工具调用的 ID。 */
     private String currentToolCallId;
 
-    /** 当前工具调用的名称。*/
+    /** 当前工具调用的名称。 */
     private String currentToolCallName;
 
-    /** 当前工具调用的参数累积缓冲区。*/
+    /** 当前工具调用的参数累积缓冲区。 */
     private final StringBuilder currentToolCallArgs = new StringBuilder();
 
-    /** 文本内容累积缓冲区。*/
+    /** 文本内容累积缓冲区。 */
     private final StringBuilder textBuffer = new StringBuilder();
 
     /**
@@ -68,7 +102,10 @@ class DeepSeekSseParser {
             return;
         }
 
-        var data = line.substring(SSE_DATA_PREFIX.length()).trim();
+        var data = line.substring(SSE_DATA_PREFIX.length());
+        if (data.startsWith(" ")) {
+            data = data.substring(1);
+        }
         if (SSE_DONE_MARKER.equals(data) || data.isEmpty()) {
             return;
         }
@@ -89,6 +126,8 @@ class DeepSeekSseParser {
      */
     void reset() {
         firstChunk = true;
+        reasoningBlockStarted = false;
+        reasoningBuffer.setLength(0);
         hasToolCalls = false;
         toolCallBlockStarted = false;
         currentToolCallId = null;
@@ -98,12 +137,32 @@ class DeepSeekSseParser {
     }
 
     /**
-     * 解析单个 SSE data 行，提取文本 delta、工具调用 delta 并发射。
+     * 解析单个 SSE data 行，提取思考/文本/工具调用增量并发射。
      */
     private void parseChunk(String json, StreamCallback callback) {
+        // 提取思考 delta（仅协议变体字段配置时；DeepSeek 系为 reasoning_content）
+        if (reasoningContentField != null) {
+            var reasoning = JsonFieldExtractor.extractString(json, reasoningContentField);
+            if (reasoning != null && !reasoning.isEmpty()) {
+                if (!reasoningBlockStarted) {
+                    callback.onChunk(new StreamChunk.BlockStart(
+                            REASONING_BLOCK_INDEX, SessionEventTypes.BLOCK_REASONING));
+                    reasoningBlockStarted = true;
+                }
+                reasoningBuffer.append(reasoning);
+                callback.onChunk(new StreamChunk.ReasoningDelta(REASONING_BLOCK_INDEX, reasoning));
+            }
+        }
+
         // 提取 choices[0].delta.content
-        var content = DeepSeekJsonExtractor.extractString(json, "content");
+        var content = JsonFieldExtractor.extractString(json, "content");
         if (content != null && !content.isEmpty()) {
+            // 首个文本 delta 前关闭思考块（思考在前、回答在后的流序）
+            if (reasoningBlockStarted) {
+                callback.onChunk(new StreamChunk.BlockEnd(REASONING_BLOCK_INDEX,
+                        new ContentBlock.Reasoning(reasoningBuffer.toString())));
+                reasoningBlockStarted = false;
+            }
             if (firstChunk) {
                 callback.onChunk(new StreamChunk.BlockStart(TEXT_BLOCK_INDEX, SessionEventTypes.BLOCK_TEXT));
                 firstChunk = false;
@@ -117,30 +176,36 @@ class DeepSeekSseParser {
             parseToolCall(json, callback);
         }
 
-        // 提取 finish_reason — 此时关闭工具调用块
-        var finish = DeepSeekJsonExtractor.extractString(json, "finish_reason");
-        if (finish != null && !finish.isEmpty() && !JSON_NULL_STRING.equals(finish)) {
-            handleFinishReason(finish, callback);
-        }
-
-        // 提取 usage（通常在最后一条非 [DONE] 消息中）
-        var usageJson = DeepSeekJsonExtractor.extractObject(json, "usage");
+        // 提取 usage — 必须先于 finish 处理（StreamChunk 契约：usage 在终结
+        // finish 之前发送；DeepSeek 等端点的两者常在同一条 data 中）
+        var usageJson = JsonFieldExtractor.extractObject(json, "usage");
         if (usageJson != null) {
-            var input = DeepSeekJsonExtractor.extractInt(usageJson, "prompt_tokens");
-            var output = DeepSeekJsonExtractor.extractInt(usageJson, "completion_tokens");
+            var input = JsonFieldExtractor.extractInt(usageJson, "prompt_tokens");
+            var output = JsonFieldExtractor.extractInt(usageJson, "completion_tokens");
             if (input != null && output != null) {
                 callback.onChunk(new StreamChunk.Usage(new TokenUsage(input, output)));
             }
         }
+
+        // 提取 finish_reason — 此时关闭文本块
+        var finish = JsonFieldExtractor.extractString(json, "finish_reason");
+        if (finish != null && !finish.isEmpty() && !JSON_NULL_STRING.equals(finish)) {
+            handleFinishReason(finish, callback);
+        }
     }
 
     private void parseToolCall(String json, StreamCallback callback) {
-        var toolCallId = DeepSeekJsonExtractor.extractToolCallId(json);
-        var toolCallName = DeepSeekJsonExtractor.extractToolCallFunctionName(json);
-        var toolCallArgs = DeepSeekJsonExtractor.extractToolCallArguments(json);
+        var toolCallId = JsonFieldExtractor.extractToolCallId(json);
+        var toolCallName = JsonFieldExtractor.extractToolCallFunctionName(json);
+        var toolCallArgs = JsonFieldExtractor.extractToolCallArguments(json);
 
         // 首次收到工具调用 → 关闭文本块（如果有），标记 hasToolCalls
         if (!hasToolCalls) {
+            if (reasoningBlockStarted) {
+                callback.onChunk(new StreamChunk.BlockEnd(REASONING_BLOCK_INDEX,
+                        new ContentBlock.Reasoning(reasoningBuffer.toString())));
+                reasoningBlockStarted = false;
+            }
             if (textBuffer.length() > 0) {
                 callback.onChunk(new StreamChunk.BlockEnd(TEXT_BLOCK_INDEX, new ContentBlock.Text(textBuffer.toString())));
             }
@@ -179,6 +244,10 @@ class DeepSeekSseParser {
                     new ContentBlock.ToolCall(id, currentToolCallName, currentToolCallArgs.toString())));
         } else if (!firstChunk) {
             callback.onChunk(new StreamChunk.BlockEnd(TEXT_BLOCK_INDEX, new ContentBlock.Text(textBuffer.toString())));
+        } else if (reasoningBlockStarted) {
+            // 纯思考回复（无文本无工具）：关闭思考块
+            callback.onChunk(new StreamChunk.BlockEnd(REASONING_BLOCK_INDEX,
+                    new ContentBlock.Reasoning(reasoningBuffer.toString())));
         }
 
         callback.onChunk(new StreamChunk.Finish(toFinishReason(finish)));
@@ -196,4 +265,3 @@ class DeepSeekSseParser {
         };
     }
 }
-

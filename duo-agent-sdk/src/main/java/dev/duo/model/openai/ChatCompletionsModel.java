@@ -1,4 +1,4 @@
-package dev.duo.model.deepseek;
+package dev.duo.model.openai;
 
 import dev.duo.adapter.openai.ChatCompletionsAdapter;
 import dev.duo.api.DuoModel;
@@ -6,53 +6,50 @@ import dev.duo.api.llm.LlmAdapter;
 import dev.duo.core.model.AbstractDuoModel;
 
 import java.time.Duration;
-import java.util.Objects;
 
 /**
- * DeepSeek 模型实现。
+ * Chat Completions 协议通用模型。
  * <p>
- * 使用 DeepSeek 官方 API（OpenAI 兼容格式）。既可独立用于单次推理
- * （{@link #call(String)} / {@link #stream(String)}），也可传入
- * {@code DuoAgent.builder().model(...)} 复用同一份模型配置创建多个 Agent。
+ * 覆盖一切 OpenAI Chat Completions 兼容端点（DeepSeek、Kimi、通义、OpenAI、
+ * Ollama、vLLM 等）。端点与鉴权均为配置值：{@code baseUrl} 必填；
+ * {@code apiKey} 可选（null 时不发 Authorization 头，适配本地无鉴权部署）；
+ * 流式思考字段名经 {@code reasoningContentField} 参数化（DeepSeek/Qwen 系为
+ * {@code "reasoning_content"}，标准端点不设置即不解析思考流）。
  * </p>
  * <p>
  * <b>示例：</b>
  * <pre>{@code
- * DuoModel model = DeepSeekModel.builder()
- *     .apiKey(System.getenv("DEEPSEEK_API_KEY"))
- *     .model("deepseek-chat")
- *     .contextWindow(128000)
+ * // Ollama 本地部署（无鉴权）
+ * DuoModel local = ChatCompletionsModel.builder()
+ *     .baseUrl("http://localhost:11434/v1")
+ *     .model("qwen3:32b")
  *     .build();
  *
- * // 单次推理
- * String answer = model.call("解释什么是事件溯源");
- *
- * // 组装 Agent（复用配置）
- * DuoAgent agent = DuoAgent.builder()
- *     .model(model)
- *     .withCodeTools()
+ * // 接任意 OpenAI 兼容云端端点
+ * DuoModel cloud = ChatCompletionsModel.builder()
+ *     .baseUrl("https://api.moonshot.cn/v1")
+ *     .apiKey(System.getenv("MOONSHOT_API_KEY"))
+ *     .model("kimi-latest")
  *     .build();
  * }</pre>
  * </p>
+ * <p>
+ * <b>线程安全</b>：实例线程安全，可被多线程共享；底层适配器按工厂语义创建。
+ * </p>
  *
  * @author zhangyl
- * @date 2026-08-20
+ * @date 2026-08-21
  */
-public final class DeepSeekModel extends AbstractDuoModel {
+public final class ChatCompletionsModel extends AbstractDuoModel {
 
-    /** DeepSeek 官方 API 端点。 */
-    public static final String DEFAULT_BASE_URL = "https://api.deepseek.com";
-
-    private static final String API_KEY_ENV = "DEEPSEEK_API_KEY";
-    private static final String API_FORMAT = "openai";
-
-    /** DeepSeek 系模型流式思考的响应字段名（Chat Completions 协议变体）。 */
-    private static final String REASONING_CONTENT_FIELD = "reasoning_content";
+    /** Chat Completions 协议标识（同时作为适配器路由的 provider 键）。 */
+    public static final String API_FORMAT = "openai";
 
     private final String apiKey;
     private final String baseUrl;
+    private final String reasoningContentField;
 
-    private DeepSeekModel(Builder builder, String apiKey) {
+    private ChatCompletionsModel(Builder builder, String apiKey) {
         super(new Config(
                 builder.modelName,
                 builder.systemPrompt,
@@ -64,10 +61,11 @@ public final class DeepSeekModel extends AbstractDuoModel {
         ));
         this.apiKey = apiKey;
         this.baseUrl = builder.baseUrl;
+        this.reasoningContentField = builder.reasoningContentField;
     }
 
     /**
-     * 创建 DeepSeek 模型构建器。
+     * 创建通用模型构建器。
      *
      * @return 构建器
      */
@@ -82,22 +80,23 @@ public final class DeepSeekModel extends AbstractDuoModel {
 
     @Override
     protected LlmAdapter newAdapter(Duration httpTimeout) {
-        // DeepSeek 端点即 Chat Completions 协议，预设流式思考字段 reasoning_content
-        return new ChatCompletionsAdapter(apiKey, baseUrl, httpTimeout, REASONING_CONTENT_FIELD);
+        return new ChatCompletionsAdapter(apiKey, baseUrl, httpTimeout, reasoningContentField);
     }
 
     /**
-     * DeepSeek 模型构建器。
+     * Chat Completions 通用模型构建器。
      * <p>
-     * 必填项：model。apiKey 未显式设置时回落到环境变量
-     * {@code DEEPSEEK_API_KEY}（与适配器的无参构造一致），仍缺失则构建失败。
+     * 必填项：baseUrl、model。apiKey 可选（本地无鉴权端点不设置）；
+     * reasoningContentField 可选（端点透出流式思考时设为
+     * {@code "reasoning_content"}，以各厂商文档为准）。
      * </p>
      */
     public static final class Builder {
 
+        private String baseUrl;
         private String apiKey;
-        private String baseUrl = DEFAULT_BASE_URL;
         private String modelName;
+        private String reasoningContentField;
         private String systemPrompt;
         private Integer contextWindow;
         private Integer maxOutputTokens;
@@ -109,7 +108,24 @@ public final class DeepSeekModel extends AbstractDuoModel {
         }
 
         /**
-         * 设置 API 密钥（未设置时回落到环境变量 DEEPSEEK_API_KEY）。
+         * 设置 API 端点（必填，含版本前缀）。
+         * <p>
+         * 如 {@code https://api.moonshot.cn/v1}、Ollama {@code http://localhost:11434/v1}；
+         * 尾部斜杠会被去除。
+         * </p>
+         *
+         * @param baseUrl API 基础 URL
+         * @return this
+         */
+        public Builder baseUrl(String baseUrl) {
+            this.baseUrl = baseUrl == null || baseUrl.isBlank()
+                    ? null
+                    : (baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl);
+            return this;
+        }
+
+        /**
+         * 设置 API 密钥（可选；null 时不发 Authorization 头，适配本地无鉴权部署）。
          *
          * @param apiKey API 密钥
          * @return this
@@ -120,32 +136,34 @@ public final class DeepSeekModel extends AbstractDuoModel {
         }
 
         /**
-         * 设置 API 端点（默认官方端点，兼容代理/自部署场景）。
-         *
-         * @param baseUrl API 基础 URL（尾部斜杠会被去除，避免拼接出双斜杠地址）
-         * @return this
-         */
-        public Builder baseUrl(String baseUrl) {
-            Objects.requireNonNull(baseUrl, "baseUrl 不能为 null");
-            this.baseUrl = baseUrl.endsWith("/")
-                    ? baseUrl.substring(0, baseUrl.length() - 1)
-                    : baseUrl;
-            return this;
-        }
-
-        /**
          * 设置模型名称（必填）。
          *
-         * @param modelName 如 "deepseek-chat" 或 "deepseek-reasoner"
+         * @param modelName 模型名称（由端点决定，如 "kimi-latest"、"qwen3:32b"）
          * @return this
          */
         public Builder model(String modelName) {
-            this.modelName = Objects.requireNonNull(modelName, "model 不能为 null");
+            this.modelName = modelName;
             return this;
         }
 
         /**
-         * 设置系统提示词（可选，空白视为未设置——避免空串静默覆盖内置默认提示词）。
+         * 设置流式思考的响应字段名（可选；null 表示端点不透出流式思考）。
+         * <p>
+         * DeepSeek/Qwen 系为 {@code "reasoning_content"}，设置后思考增量以
+         * {@code ReasoningDelta} 透出；标准端点不设置即不解析。
+         * 以各厂商文档为准。
+         * </p>
+         *
+         * @param fieldName 思考增量的响应字段名
+         * @return this
+         */
+        public Builder reasoningContentField(String fieldName) {
+            this.reasoningContentField = fieldName;
+            return this;
+        }
+
+        /**
+         * 设置系统提示词（可选，空白视为未设置）。
          * <p>
          * Agent 组装时的优先级：Agent 显式 systemPrompt &gt; 本值 &gt; 内置默认。
          * </p>
@@ -161,7 +179,7 @@ public final class DeepSeekModel extends AbstractDuoModel {
         /**
          * 设置上下文窗口大小（可选）。
          *
-         * @param tokens 上下文窗口 token 数（deepseek-chat 为 128000）
+         * @param tokens 上下文窗口 token 数
          * @return this
          * @throws IllegalArgumentException 如果 tokens 非正
          */
@@ -174,10 +192,7 @@ public final class DeepSeekModel extends AbstractDuoModel {
         }
 
         /**
-         * 设置单次响应的最大输出 token 数（可选）。
-         * <p>
-         * 默认不设置，由模型决定输出长度，避免截断推理模型的长输出。
-         * </p>
+         * 设置单次响应的最大输出 token 数（可选，默认由模型决定）。
          *
          * @param tokens 最大输出 token 数
          * @return this
@@ -207,10 +222,11 @@ public final class DeepSeekModel extends AbstractDuoModel {
         }
 
         /**
-         * 启用深度推理模式（如 deepseek-reasoner）。
+         * 启用深度推理模式（可选）。
          * <p>
          * 启用后 LLM 调用超时切换为 {@link #reasoningTimeout(Duration)}，
-         * 响应可能包含 ReasoningDelta 思考增量。
+         * 响应可能包含 ReasoningDelta 思考增量（需端点配合
+         * {@link #reasoningContentField(String)} 设置）。
          * </p>
          *
          * @param enable true 启用（默认 false）
@@ -229,8 +245,7 @@ public final class DeepSeekModel extends AbstractDuoModel {
          * @throws IllegalArgumentException 如果 timeout 非正
          */
         public Builder reasoningTimeout(Duration timeout) {
-            Objects.requireNonNull(timeout, "reasoningTimeout 不能为 null");
-            if (timeout.isZero() || timeout.isNegative()) {
+            if (timeout == null || timeout.isZero() || timeout.isNegative()) {
                 throw new IllegalArgumentException("reasoningTimeout 必须大于 0");
             }
             this.reasoningTimeout = timeout;
@@ -238,25 +253,22 @@ public final class DeepSeekModel extends AbstractDuoModel {
         }
 
         /**
-         * 构建 DeepSeek 模型实例。
+         * 构建模型实例。
          *
          * @return 模型实例
-         * @throws IllegalStateException 如果 model 未设置，或 apiKey 与
-         *                               DEEPSEEK_API_KEY 环境变量均缺失
+         * @throws IllegalStateException 如果 baseUrl 或 model 未设置
          */
         public DuoModel build() {
-            if (modelName == null || modelName.isBlank()) {
-                throw new IllegalStateException("未配置模型名称。请调用 .model(\"deepseek-chat\") 方法。");
-            }
-            // 局部变量解析，不回写 builder：避免凭据残留在 builder 对象上
-            //（调用方可能保留 builder 引用用于日志/复用）
-            var resolvedApiKey = (apiKey == null || apiKey.isBlank())
-                    ? System.getenv(API_KEY_ENV) : apiKey;
-            if (resolvedApiKey == null || resolvedApiKey.isBlank()) {
+            if (baseUrl == null || baseUrl.isBlank()) {
                 throw new IllegalStateException(
-                        "未设置 API Key。请调用 .apiKey(\"your-api-key\") 或设置环境变量 " + API_KEY_ENV + "。");
+                        "未设置 baseUrl。Chat Completions 兼容端点无官方默认值，请显式设置（如 http://localhost:11434/v1）。");
             }
-            return new DeepSeekModel(this, resolvedApiKey);
+            if (modelName == null || modelName.isBlank()) {
+                throw new IllegalStateException("未配置模型名称。请调用 .model(\"...\") 方法。");
+            }
+            // apiKey 可选（本地无鉴权端点），不回落环境变量——通用端点无统一约定
+            var resolvedApiKey = (apiKey == null || apiKey.isBlank()) ? null : apiKey;
+            return new ChatCompletionsModel(this, resolvedApiKey);
         }
     }
 }

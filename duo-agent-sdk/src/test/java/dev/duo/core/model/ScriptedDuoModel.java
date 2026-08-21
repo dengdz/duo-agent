@@ -22,6 +22,8 @@ public final class ScriptedDuoModel extends AbstractDuoModel {
 
     private final Function<Duration, LlmAdapter> adapterFactory;
 
+    private final String apiFormat;
+
     /**
      * 以固定适配器实例构建桩（{@link #createAdapter()} 与
      * {@link #createAdapter(Duration)} 返回同一实例）。
@@ -40,13 +42,22 @@ public final class ScriptedDuoModel extends AbstractDuoModel {
      */
     public ScriptedDuoModel(Function<Duration, LlmAdapter> adapterFactory, String systemPrompt,
                             boolean reasoningEnabled, Duration reasoningTimeout) {
+        this(adapterFactory, systemPrompt, reasoningEnabled, reasoningTimeout, "openai");
+    }
+
+    /**
+     * 指定协议标识的构造（覆盖 responses 等新协议经 AgentOptions 白名单的组装路径）。
+     */
+    public ScriptedDuoModel(Function<Duration, LlmAdapter> adapterFactory, String systemPrompt,
+                            boolean reasoningEnabled, Duration reasoningTimeout, String apiFormat) {
         super(new Config("mock-model", systemPrompt, null, null, null, reasoningEnabled, reasoningTimeout));
         this.adapterFactory = adapterFactory;
+        this.apiFormat = apiFormat;
     }
 
     @Override
     public String getApiFormat() {
-        return "openai";
+        return apiFormat;
     }
 
     @Override

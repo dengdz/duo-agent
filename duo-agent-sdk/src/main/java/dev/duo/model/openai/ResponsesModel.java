@@ -1,58 +1,57 @@
-package dev.duo.model.deepseek;
+package dev.duo.model.openai;
 
-import dev.duo.adapter.openai.ChatCompletionsAdapter;
+import dev.duo.adapter.openai.ResponsesAdapter;
 import dev.duo.api.DuoModel;
 import dev.duo.api.llm.LlmAdapter;
 import dev.duo.core.model.AbstractDuoModel;
 
 import java.time.Duration;
-import java.util.Objects;
+import java.util.Set;
 
 /**
- * DeepSeek 模型实现。
+ * OpenAI Responses 协议模型。
  * <p>
- * 使用 DeepSeek 官方 API（OpenAI 兼容格式）。既可独立用于单次推理
- * （{@link #call(String)} / {@link #stream(String)}），也可传入
- * {@code DuoAgent.builder().model(...)} 复用同一份模型配置创建多个 Agent。
+ * 覆盖 OpenAI 官方端点——gpt-5 / o 系列等新模型能力（reasoning effort 等）
+ * 只在 Responses API 提供，Chat Completions 已进入维护态。协议差异
+ * （顶层 instructions、input items、平铺工具定义、reasoning effort）
+ * 全部在适配器层处理，对 Agent 层透明。
  * </p>
  * <p>
  * <b>示例：</b>
  * <pre>{@code
- * DuoModel model = DeepSeekModel.builder()
- *     .apiKey(System.getenv("DEEPSEEK_API_KEY"))
- *     .model("deepseek-chat")
- *     .contextWindow(128000)
- *     .build();
- *
- * // 单次推理
- * String answer = model.call("解释什么是事件溯源");
- *
- * // 组装 Agent（复用配置）
- * DuoAgent agent = DuoAgent.builder()
- *     .model(model)
- *     .withCodeTools()
+ * DuoModel gpt = ResponsesModel.builder()
+ *     .apiKey(System.getenv("OPENAI_API_KEY"))
+ *     .model("gpt-5.2")
+ *     .enableReasoning(true)
+ *     .reasoningEffort("high")
  *     .build();
  * }</pre>
  * </p>
+ * <p>
+ * <b>线程安全</b>：实例线程安全，可被多线程共享；底层适配器按工厂语义创建。
+ * </p>
  *
  * @author zhangyl
- * @date 2026-08-20
+ * @date 2026-08-21
  */
-public final class DeepSeekModel extends AbstractDuoModel {
+public final class ResponsesModel extends AbstractDuoModel {
 
-    /** DeepSeek 官方 API 端点。 */
-    public static final String DEFAULT_BASE_URL = "https://api.deepseek.com";
+    /** Responses 协议标识（同时作为适配器路由的 provider 键）。 */
+    public static final String API_FORMAT = "responses";
 
-    private static final String API_KEY_ENV = "DEEPSEEK_API_KEY";
-    private static final String API_FORMAT = "openai";
+    private static final String API_KEY_ENV = "OPENAI_API_KEY";
 
-    /** DeepSeek 系模型流式思考的响应字段名（Chat Completions 协议变体）。 */
-    private static final String REASONING_CONTENT_FIELD = "reasoning_content";
+    /** reasoning effort 的默认级别（enableReasoning(true) 时生效）。 */
+    private static final String DEFAULT_REASONING_EFFORT = "medium";
+
+    /** reasoning effort 的合法取值集（以 OpenAI 官方文档为准）。 */
+    private static final Set<String> REASONING_EFFORTS = Set.of("minimal", "low", "medium", "high");
 
     private final String apiKey;
     private final String baseUrl;
+    private final String reasoningEffort;
 
-    private DeepSeekModel(Builder builder, String apiKey) {
+    private ResponsesModel(Builder builder, String apiKey) {
         super(new Config(
                 builder.modelName,
                 builder.systemPrompt,
@@ -64,10 +63,11 @@ public final class DeepSeekModel extends AbstractDuoModel {
         ));
         this.apiKey = apiKey;
         this.baseUrl = builder.baseUrl;
+        this.reasoningEffort = builder.reasoningEnabled ? builder.reasoningEffort : null;
     }
 
     /**
-     * 创建 DeepSeek 模型构建器。
+     * 创建 Responses 模型构建器。
      *
      * @return 构建器
      */
@@ -82,21 +82,20 @@ public final class DeepSeekModel extends AbstractDuoModel {
 
     @Override
     protected LlmAdapter newAdapter(Duration httpTimeout) {
-        // DeepSeek 端点即 Chat Completions 协议，预设流式思考字段 reasoning_content
-        return new ChatCompletionsAdapter(apiKey, baseUrl, httpTimeout, REASONING_CONTENT_FIELD);
+        return new ResponsesAdapter(apiKey, baseUrl, httpTimeout, reasoningEffort);
     }
 
     /**
-     * DeepSeek 模型构建器。
+     * Responses 模型构建器。
      * <p>
-     * 必填项：model。apiKey 未显式设置时回落到环境变量
-     * {@code DEEPSEEK_API_KEY}（与适配器的无参构造一致），仍缺失则构建失败。
+     * 必填项：model。baseUrl 默认 OpenAI 官方端点；apiKey 未显式设置时回落
+     * 环境变量 {@code OPENAI_API_KEY}。
      * </p>
      */
     public static final class Builder {
 
         private String apiKey;
-        private String baseUrl = DEFAULT_BASE_URL;
+        private String baseUrl = ResponsesAdapter.DEFAULT_BASE_URL;
         private String modelName;
         private String systemPrompt;
         private Integer contextWindow;
@@ -104,12 +103,13 @@ public final class DeepSeekModel extends AbstractDuoModel {
         private Double temperature;
         private boolean reasoningEnabled = false;
         private Duration reasoningTimeout = Duration.ofMinutes(5);
+        private String reasoningEffort = DEFAULT_REASONING_EFFORT;
 
         private Builder() {
         }
 
         /**
-         * 设置 API 密钥（未设置时回落到环境变量 DEEPSEEK_API_KEY）。
+         * 设置 API 密钥（未设置时回落环境变量 OPENAI_API_KEY）。
          *
          * @param apiKey API 密钥
          * @return this
@@ -120,32 +120,31 @@ public final class DeepSeekModel extends AbstractDuoModel {
         }
 
         /**
-         * 设置 API 端点（默认官方端点，兼容代理/自部署场景）。
+         * 设置 API 端点（默认 OpenAI 官方；兼容端点可覆盖；尾部斜杠会被去除）。
          *
-         * @param baseUrl API 基础 URL（尾部斜杠会被去除，避免拼接出双斜杠地址）
+         * @param baseUrl API 基础 URL
          * @return this
          */
         public Builder baseUrl(String baseUrl) {
-            Objects.requireNonNull(baseUrl, "baseUrl 不能为 null");
-            this.baseUrl = baseUrl.endsWith("/")
-                    ? baseUrl.substring(0, baseUrl.length() - 1)
-                    : baseUrl;
+            this.baseUrl = baseUrl == null || baseUrl.isBlank()
+                    ? ResponsesAdapter.DEFAULT_BASE_URL
+                    : (baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl);
             return this;
         }
 
         /**
-         * 设置模型名称（必填）。
+         * 设置模型名称（必填，如 "gpt-5.2"、"o4-mini"）。
          *
-         * @param modelName 如 "deepseek-chat" 或 "deepseek-reasoner"
+         * @param modelName 模型名称
          * @return this
          */
         public Builder model(String modelName) {
-            this.modelName = Objects.requireNonNull(modelName, "model 不能为 null");
+            this.modelName = modelName;
             return this;
         }
 
         /**
-         * 设置系统提示词（可选，空白视为未设置——避免空串静默覆盖内置默认提示词）。
+         * 设置系统提示词（可选，空白视为未设置；经顶层 instructions 参数发送）。
          * <p>
          * Agent 组装时的优先级：Agent 显式 systemPrompt &gt; 本值 &gt; 内置默认。
          * </p>
@@ -161,7 +160,7 @@ public final class DeepSeekModel extends AbstractDuoModel {
         /**
          * 设置上下文窗口大小（可选）。
          *
-         * @param tokens 上下文窗口 token 数（deepseek-chat 为 128000）
+         * @param tokens 上下文窗口 token 数
          * @return this
          * @throws IllegalArgumentException 如果 tokens 非正
          */
@@ -174,10 +173,7 @@ public final class DeepSeekModel extends AbstractDuoModel {
         }
 
         /**
-         * 设置单次响应的最大输出 token 数（可选）。
-         * <p>
-         * 默认不设置，由模型决定输出长度，避免截断推理模型的长输出。
-         * </p>
+         * 设置单次响应的最大输出 token 数（可选，映射 max_output_tokens）。
          *
          * @param tokens 最大输出 token 数
          * @return this
@@ -207,10 +203,11 @@ public final class DeepSeekModel extends AbstractDuoModel {
         }
 
         /**
-         * 启用深度推理模式（如 deepseek-reasoner）。
+         * 启用深度推理模式（可选）。
          * <p>
-         * 启用后 LLM 调用超时切换为 {@link #reasoningTimeout(Duration)}，
-         * 响应可能包含 ReasoningDelta 思考增量。
+         * 启用后请求携带 {@code reasoning: {effort}}（级别经
+         * {@link #reasoningEffort(String)} 配置），思考摘要增量以 ReasoningDelta
+         * 透出（依赖端点生成摘要）；LLM 调用超时切换为 {@link #reasoningTimeout(Duration)}。
          * </p>
          *
          * @param enable true 启用（默认 false）
@@ -229,8 +226,7 @@ public final class DeepSeekModel extends AbstractDuoModel {
          * @throws IllegalArgumentException 如果 timeout 非正
          */
         public Builder reasoningTimeout(Duration timeout) {
-            Objects.requireNonNull(timeout, "reasoningTimeout 不能为 null");
-            if (timeout.isZero() || timeout.isNegative()) {
+            if (timeout == null || timeout.isZero() || timeout.isNegative()) {
                 throw new IllegalArgumentException("reasoningTimeout 必须大于 0");
             }
             this.reasoningTimeout = timeout;
@@ -238,25 +234,40 @@ public final class DeepSeekModel extends AbstractDuoModel {
         }
 
         /**
-         * 构建 DeepSeek 模型实例。
+         * 设置推理努力级别（仅在 enableReasoning(true) 时生效，默认 "medium"）。
+         *
+         * @param effort 级别（minimal / low / medium / high）
+         * @return this
+         * @throws IllegalArgumentException 如果取值非法
+         */
+        public Builder reasoningEffort(String effort) {
+            if (effort == null || !REASONING_EFFORTS.contains(effort)) {
+                throw new IllegalArgumentException(
+                        "reasoningEffort 必须为 " + REASONING_EFFORTS + " 之一，当前: " + effort);
+            }
+            this.reasoningEffort = effort;
+            return this;
+        }
+
+        /**
+         * 构建 Responses 模型实例。
          *
          * @return 模型实例
          * @throws IllegalStateException 如果 model 未设置，或 apiKey 与
-         *                               DEEPSEEK_API_KEY 环境变量均缺失
+         *                               OPENAI_API_KEY 环境变量均缺失
          */
         public DuoModel build() {
             if (modelName == null || modelName.isBlank()) {
-                throw new IllegalStateException("未配置模型名称。请调用 .model(\"deepseek-chat\") 方法。");
+                throw new IllegalStateException("未配置模型名称。请调用 .model(\"...\") 方法。");
             }
             // 局部变量解析，不回写 builder：避免凭据残留在 builder 对象上
-            //（调用方可能保留 builder 引用用于日志/复用）
             var resolvedApiKey = (apiKey == null || apiKey.isBlank())
                     ? System.getenv(API_KEY_ENV) : apiKey;
             if (resolvedApiKey == null || resolvedApiKey.isBlank()) {
                 throw new IllegalStateException(
                         "未设置 API Key。请调用 .apiKey(\"your-api-key\") 或设置环境变量 " + API_KEY_ENV + "。");
             }
-            return new DeepSeekModel(this, resolvedApiKey);
+            return new ResponsesModel(this, resolvedApiKey);
         }
     }
 }

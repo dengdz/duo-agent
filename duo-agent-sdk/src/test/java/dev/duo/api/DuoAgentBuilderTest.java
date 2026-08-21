@@ -280,4 +280,17 @@ class DuoAgentBuilderTest {
         assertEquals(Duration.ofSeconds(150), captured.get(),
                 "非推理模型的 reasoningTimeout 不应影响 HTTP 兜底超时");
     }
+
+    @Test
+    void buildShouldAcceptAllThreeProtocolFormats() {
+        // AgentOptions 的 apiFormat 白名单必须覆盖全部协议标识——
+        // responses 缺失曾导致 ResponsesModel 组装 Agent 时直接抛异常（实机发现）
+        for (var format : new String[]{"openai", "anthropic", "responses"}) {
+            var model = new ScriptedDuoModel(
+                    timeout -> new ScriptedStreamAdapter(ScriptedStreamAdapter.textReply("ok")),
+                    null, false, Duration.ofMinutes(5), format);
+            var agent = DuoAgent.builder().model(model).build();
+            assertEquals(true, agent != null, format + " 协议应可组装 Agent");
+        }
+    }
 }
