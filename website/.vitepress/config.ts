@@ -60,14 +60,16 @@ export default defineConfig({
         items: [
           { text: '架构总览', link: '/04-architecture/overview' },
           { text: '事件溯源', link: '/04-architecture/event-sourcing' },
-          { text: 'ReAct 循环', link: '/04-architecture/react-loop' }
+          { text: 'ReAct 循环', link: '/04-architecture/react-loop' },
+          { text: 'SDK 设计', link: '/04-architecture/sdk-design' }
         ]
       },
       {
         text: '参考',
         items: [
           { text: '事件类型参考', link: '/05-reference/events' },
-          { text: '已知限制与路线图', link: '/05-reference/limitations' }
+          { text: '已知限制与路线图', link: '/05-reference/limitations' },
+          { text: '术语表', link: '/05-reference/glossary' }
         ]
       }
     ],
