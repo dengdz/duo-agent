@@ -2,7 +2,6 @@ package dev.duo.model.session;
 
 /**
  * 会话标识的不透明包装类型。
- * 对应 TS 源码中的 {@code Branded<'SessionId'>}。
  *
  * @author zhangyl
  * @date 2026-08-18

@@ -6,7 +6,7 @@ import dev.duo.model.session.SessionId;
 /**
  * 模型请求构造的环绕拦截点。
  * <p>
- * 对应 TS 源码中的 {@code agent/request} waterfall：内置行为是"从 session 日志派生消息、
+ * 内置行为是"从 session 日志派生消息、
  * 组装 system prompt 与工具 schema，构造默认 {@link GenerateOptions}"。
  * 监听器不能改历史消息（模型可见即已记录），只能通过返回改写后的
  * {@link GenerateOptions} 调整模型、maxTokens 等请求参数。

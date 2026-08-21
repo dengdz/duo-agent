@@ -8,7 +8,6 @@ package dev.duo.model.llm;
  * （计费输入 = 三者之和）。
  * </p>
  * <p>
- * 对应 TS 源码中的 {@code TokenUsage}。
  * </p>
  *
  * @author zhangyl

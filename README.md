@@ -8,7 +8,7 @@
 - 🌐 **多厂商** - 三协议适配：OpenAI 兼容 / Anthropic（智谱 GLM）/ Responses
 - 🔧 **内置工具链** - bash、文件操作、代码编辑、搜索等
 - 🔌 **零依赖** - 纯 Java 21，无第三方依赖
-- 🧪 **高质量** - 297 个单元测试，100% 工具链稳定性
+- 🧪 **高质量** - 298 个单元测试，100% 工具链稳定性
 - 🎯 **ReAct 架构** - 成熟的推理-行动循环模式
 - 🧠 **推理模式** - 支持深度推理模型（reasoning / thinking / effort）
 
@@ -209,10 +209,10 @@ Flowable<SessionEvent> flowable = Flowable.fromPublisher(agent.stream(...)); // 
 ```java
 var agent = DuoAgent.builder().model(model).withCodeTools().build();
 agent.stream("执行一个长时间任务").subscribe(...);
-agent.cancel(AgentCancelCause.User(), new CancelOptions());  // 中断 HTTP、终止进程
+agent.cancel(AgentCancelCause.User());  // 中断 HTTP、终止进程
 ```
 
-取消传播：断开 LLM HTTP 流 + 终止 bash 进程（SIGTERM → 3s → SIGKILL）。详见[取消与中断](docs/05-reference/limitations.md#取消与中断)。
+取消传播：断开 LLM HTTP 流 + 终止 bash 进程（SIGTERM → 3s → SIGKILL）。详见[取消与中断](docs/02-guide/cancellation.md)。
 
 ### 行为说明
 - **冷发布者** — 订阅时才发起对话，未订阅不消耗 API 调用
@@ -220,7 +220,7 @@ agent.cancel(AgentCancelCause.User(), new CancelOptions());  // 中断 HTTP、�
   边界事件全部推送，订阅者按需过滤
 - **多轮工具调用** — Agent 使用工具后会再次调用模型，订阅者收到多段连续文本流
 - **背压** — 通过 `request(n)` 控制拉取节奏，消费慢时增量内部缓冲不丢失
-- **取消** — `cancel()` 断开 HTTP 连接、停止推送并释放资源，详见[取消与中断](docs/05-reference/limitations.md#取消与中断)
+- **取消** — `subscription.cancel()` 停止推送；`Agent.cancel()` 中断执行（断开 HTTP、终止进程），详见[取消与中断](docs/02-guide/cancellation.md)
 - **单订阅** — 每次调用返回的 Publisher 仅支持订阅一次
 
 ### 事件类型速查
@@ -458,7 +458,7 @@ Session session = agent.getSession();
 duo-agent/
 ├── duo-agent-sdk/          # SDK 核心模块
 │   ├── src/main/java/      # SDK 源码
-│   └── src/test/java/      # SDK 单元测试（297 个测试）
+│   └── src/test/java/      # SDK 单元测试（298 个测试）
 ├── duo-agent-example/      # 示例/调试模块
 │   └── src/main/java/      # 使用示例
 └── pom.xml                 # 父 POM
@@ -578,7 +578,7 @@ var agent = new ReactLoopAgent(...);
 ### 运行单元测试
 
 ```bash
-# 运行全部测试（297 个）
+# 运行全部测试（298 个）
 mvn test
 
 # 运行 SDK 测试
@@ -590,22 +590,24 @@ mvn test -Dtest=DuoAgentBuilderTest
 
 ### 自定义工具
 
-实现 `ToolDefinition` 接口：
+一个工具就是"名称 + 描述 + JSON Schema 参数 + 执行函数"，用 `ToolDefinition` 组装：
 
 ```java
-public class MyTool implements ToolProvider {
-    @Override
+public class MyTool {
     public ToolDefinition getDefinition() {
         return new ToolDefinition(
             "my_tool",
             "工具描述",
-            Map.of("param", Map.of("type", "string")),
+            Map.of("type", "object",
+                   "properties", Map.of("param", Map.of("type", "string"))),
             this::execute
         );
     }
 
-    private ToolExecutionResult execute(Map<String, Object> args) {
-        // 实现工具逻辑
+    private ToolExecutionResult execute(ToolExecution execution)
+            throws TurnCancelledException {
+        var param = execution.arguments().get("param");  // 长时操作可检查
+        execution.cancellation().checkPoint();           // execution.cancellation()
         return new ToolExecutionResult("执行结果");
     }
 }
@@ -617,6 +619,8 @@ var agent = DuoAgent.builder()
     .build();
 ```
 
+完整模式（参数校验、错误回传、响应取消）见[自定义工具指南](docs/02-guide/tools-custom.md)。
+
 ## ⚠️ 已知限制
 
 - 无重大限制。0.3.0 起提供三种协议 Model：`ChatCompletionsModel`（一切
@@ -625,7 +629,7 @@ var agent = DuoAgent.builder()
 
 ## 📊 质量保证
 
-- ✅ **297 个单元测试** - 覆盖核心功能（含流式 API 测试）
+- ✅ **298 个单元测试** - 覆盖核心功能（含流式 API 测试）
 - ✅ **四轮 AI 代码审查** - 45 个问题全部修复
 - ✅ **100% 工具链稳定性** - 经过 DeepSeek API 实测验证
 - ✅ **零依赖** - 纯 Java 21，无第三方库

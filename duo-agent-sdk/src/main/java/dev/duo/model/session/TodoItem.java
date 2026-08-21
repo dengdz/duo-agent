@@ -3,7 +3,6 @@ package dev.duo.model.session;
 /**
  * 一个 agent 的 todo 列表条目——{@code todo/write} 事件的整表快照单元。
  * <p>
- * 对应 TS 源码中的 {@code TodoItem}。
  * </p>
  *
  * @author zhangyl

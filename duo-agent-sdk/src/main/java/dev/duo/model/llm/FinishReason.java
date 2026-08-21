@@ -3,7 +3,6 @@ package dev.duo.model.llm;
 /**
  * 模型响应停止的原因。
  * <p>
- * 对应 TS 源码中的 {@code FinishReasonMap}。
  * </p>
  *
  * @author zhangyl

@@ -3,7 +3,6 @@ package dev.duo.model.llm;
 /**
  * 动态模型上下文，物化为持久化的用户角色快照。
  * <p>
- * 对应 TS 源码中的 {@code PromptContext}。
  * </p>
  *
  * @author zhangyl

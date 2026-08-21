@@ -6,7 +6,6 @@ import dev.duo.model.session.SessionId;
 /**
  * 通过 registry 以编程方式创建 agent 的选项。
  * <p>
- * 对应 TS 源码中的 {@code CreateAgentOptions}。
  * </p>
  *
  * @author zhangyl

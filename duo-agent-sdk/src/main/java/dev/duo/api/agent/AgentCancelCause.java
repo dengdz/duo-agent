@@ -3,7 +3,6 @@ package dev.duo.api.agent;
 /**
  * 活跃 Agent 驱动被取消的原因。
  * <p>
- * 对应 TS 源码中的 {@code AgentCancelCause}。
  * </p>
  *
  * @author zhangyl

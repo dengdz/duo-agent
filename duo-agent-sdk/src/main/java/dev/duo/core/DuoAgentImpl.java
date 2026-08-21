@@ -2,6 +2,8 @@ package dev.duo.core;
 
 import dev.duo.api.DuoAgent;
 import dev.duo.api.agent.Agent;
+import dev.duo.api.agent.AgentCancelCause;
+import dev.duo.api.agent.CancelOptions;
 import dev.duo.core.flow.BufferedPublisher;
 import dev.duo.core.session.Session;
 import dev.duo.model.llm.ContentBlock;
@@ -101,7 +103,7 @@ public final class DuoAgentImpl implements DuoAgent {
         if (message == null || message.isBlank()) {
             throw new IllegalArgumentException("消息内容不能为空");
         }
-        // 冷发布者：session 事件广播全量透传（对应 DSH 的 session/event 订阅模式）。
+        // 冷发布者：session 事件广播全量透传。
         // 流式真源是 session 事件广播——adapter 的每个增量已由 ReactLoopAgent
         // 逐 chunk 写入 session，这里订阅广播并透传给订阅者；对话轮由 call() 驱动，
         // 驱动线程正常返回即补发完成信号、抛出异常即转为失败信号
@@ -118,6 +120,16 @@ public final class DuoAgentImpl implements DuoAgent {
                 }
             }
         });
+    }
+
+    @Override
+    public void cancel(AgentCancelCause cause) {
+        agent.cancel(cause);
+    }
+
+    @Override
+    public void cancel(AgentCancelCause cause, CancelOptions options) {
+        agent.cancel(cause, options);
     }
 
     @Override

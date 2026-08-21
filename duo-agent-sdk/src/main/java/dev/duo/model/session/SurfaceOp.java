@@ -3,7 +3,6 @@ package dev.duo.model.session;
 /**
  * 会话事件如何进入模型可见表面。
  * <p>
- * 对应 TS 源码中的 {@code SurfaceOp}。
  * </p>
  *
  * @author zhangyl

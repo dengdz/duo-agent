@@ -24,10 +24,9 @@ import java.util.stream.Stream;
 /**
  * grep 工具：用正则表达式搜索文件内容。
  * <p>
- * 对应 DSH {@code tool-fs-search} 的 grep（v1 纯 Java 实现）：返回带行号的匹配行，
- * 按文件分组；内联保留前 {@value #MAX_MATCHES} 条匹配，超出部分继续计数并报告
- * 总数，提示缩小搜索范围。include 只支持单个正向 glob。VCS 元数据目录与疑似
- * 二进制文件跳过。
+ * 返回带行号的匹配行，按文件分组；内联保留前 {@value #MAX_MATCHES} 条匹配，
+ * 超出部分继续计数并报告总数，提示缩小搜索范围。include 只支持单个正向 glob。
+ * VCS 元数据目录与疑似二进制文件跳过。
  * </p>
  *
  * @author zhangyl
@@ -37,7 +36,7 @@ public class GrepTool {
 
     private static final Logger logger = LoggerFactory.getLogger(GrepTool.class);
 
-    /** 单次调用内联保留的最大匹配数（DSH 默认 250）。 */
+    /** 单次调用内联保留的最大匹配数。 */
     private static final int MAX_MATCHES = 250;
 
     /** 单条匹配行预览的最大字符数。 */

@@ -7,7 +7,6 @@ import java.util.List;
 /**
  * 循环是否以及以哪些消息进入提议的 step。
  * <p>
- * 对应 TS 源码中的 {@code PreStepDecision}。
  * </p>
  *
  * @author zhangyl

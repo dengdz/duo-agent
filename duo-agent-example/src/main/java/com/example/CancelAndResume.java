@@ -59,7 +59,7 @@ public class CancelAndResume {
         // 等待 3 秒后取消
         Thread.sleep(3000);
         System.out.println("\n[3s] 取消第 1 次请求...");
-        agent.cancel(new AgentCancelCause.User(), new CancelOptions(false));
+        duoAgent.cancel(new AgentCancelCause.User(), new CancelOptions(false));
         agent.whenIdle();
         System.out.println("✓ 第 1 次请求已取消");
 

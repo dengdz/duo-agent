@@ -3,7 +3,6 @@ package dev.duo.api.agent;
 /**
  * {@link Agent#cancel} 的选项。
  * <p>
- * 对应 TS 源码中的 {@code CancelOptions}。
  * </p>
  *
  * @author zhangyl

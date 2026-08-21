@@ -5,7 +5,6 @@ import java.util.Map;
 /**
  * 工具定义。
  * <p>
- * 对应 TS 源码中的 {@code ToolDefinition}。
  * </p>
  *
  * @author zhangyl

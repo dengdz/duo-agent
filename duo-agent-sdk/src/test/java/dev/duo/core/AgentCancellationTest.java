@@ -44,6 +44,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -345,6 +346,43 @@ class AgentCancellationTest {
 
         var result = eventsOf(fix.session(), SessionEventToolResult.class).getFirst();
         assertEquals("ABORTED", result.errorCode());
+    }
+
+    @Test
+    void facadeCancel_interruptsHangingTurnAndUnblocksCall() throws Exception {
+        // 门面 cancel 的"停止生成"场景：call() 阻塞中，另一线程走 DuoAgent.cancel()
+        var fix = newFixture(new HangingAdapter(), "hanging-facade");
+        var duo = new DuoAgentImpl(fix.agent(), fix.session());
+
+        fix.agent().followup(userMessage("hi"));
+        awaitEvent(fix.session(), SessionEventTypes.TURN_START);
+
+        var callResult = new AtomicReference<String>();
+        var callError = new AtomicReference<RuntimeException>();
+        var caller = new Thread(() -> {
+            try {
+                callResult.set(duo.call("again"));
+            } catch (RuntimeException e) {
+                callError.set(e);
+            }
+        });
+        caller.start();
+
+        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
+            // 等 caller 进入阻塞（followup 已入队或尚未入队，两种时序结果一致：
+            // turn1 都以 Aborted 收尾，caller 的 whenIdle 返回）
+            Thread.sleep(200);
+            duo.cancel(new AgentCancelCause.User());
+            caller.join(TimeUnit.SECONDS.toMillis(9));
+        }, "门面取消应中断挂起 turn 并秒级解除 call 阻塞");
+
+        assertNull(callError.get(), "取消后的 call 不应抛异常");
+        assertEquals("(Agent 已取消)", callResult.get(),
+                "被取消轮上的阻塞 call 返回提示文本");
+
+        var turnEnd = eventsOf(fix.session(), SessionEventTurnEnd.class).getFirst();
+        assertInstanceOf(TurnEndReason.Aborted.class, turnEnd.reason(),
+                "门面 cancel 与底层 cancel 语义一致");
     }
 
     // ---- 辅助 ----

@@ -6,7 +6,6 @@ import java.util.List;
 /**
  * 任务条目的生命周期状态。
  * <p>
- * 对应 TS 源码中的 {@code TodoStatus}。
  * 协议字符串集中在此定义，避免魔法值散落。
  * </p>
  *

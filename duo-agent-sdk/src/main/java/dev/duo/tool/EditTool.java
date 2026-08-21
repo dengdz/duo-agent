@@ -19,8 +19,7 @@ import java.util.Objects;
 /**
  * edit 工具：对文件做精确字符串替换或按行插入。
  * <p>
- * 对应 DSH {@code tool-str-replace-editor} 的 str_replace/insert 命令
- * （view/create 由 {@link FileReadTool}/{@link FileWriteTool} 承担）。
+ * 提供 str_replace/insert 两种命令（view/create 由 {@link FileReadTool}/{@link FileWriteTool} 承担）。
  * str_replace 的 old_str 必须在文件中精确匹配且唯一：未找到或多处出现都拒绝执行，
  * 多处出现时列出全部冲突行号，要求扩大上下文使匹配唯一。
  * </p>
@@ -185,7 +184,7 @@ public class EditTool {
             return new ToolExecutionResult("错误：insert_line 超出范围 [0, " + lines.length + "]: " + line);
         }
 
-        // DSH 语义：新内容插在 lines[line] 之前（0 表示文件最开头）
+        // 新内容插在 lines[line] 之前（0 表示文件最开头）
         var updated = new StringBuilder();
         for (var i = 0; i <= lines.length; i++) {
             if (i == line) {

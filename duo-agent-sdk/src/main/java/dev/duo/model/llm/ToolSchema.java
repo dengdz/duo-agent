@@ -5,7 +5,6 @@ import java.util.Map;
 /**
  * 发送给模型的工具 JSON Schema 描述。
  * <p>
- * 对应 TS 源码中的 {@code ToolSchema}。
  * </p>
  *
  * @author zhangyl

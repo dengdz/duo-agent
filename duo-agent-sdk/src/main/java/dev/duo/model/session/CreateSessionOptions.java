@@ -3,7 +3,6 @@ package dev.duo.model.session;
 /**
  * 创建会话时的选项。
  * <p>
- * 对应 TS 源码中的 {@code CreateSessionOptions}。
  * </p>
  *
  * @author zhangyl

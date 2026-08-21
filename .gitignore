@@ -53,3 +53,6 @@ website/docs/
 
 # Maven shade 插件构建产物
 dependency-reduced-pom.xml
+
+# 本地决策记录（不上传）
+ADR_*.md

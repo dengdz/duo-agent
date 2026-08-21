@@ -89,6 +89,14 @@ agent.call("给我一个 Java 实现");     // 第二轮，模型记得上文
 agent.call("加上单元测试");           // 第三轮
 ```
 
+## 取消当前对话
+
+```java
+agent.cancel(AgentCancelCause.User());   // 中断 LLM 流、终止工具进程
+```
+
+阻塞中的 `call()` 立即返回 `"(Agent 已取消)"`，订阅中的 `stream()` 以 `onComplete` 结束。取消只终止当前轮，Agent 可继续下一轮对话。行为细节见[取消与中断](cancellation.md)。
+
 ## 线程安全
 
 > ⚠️ **同一 DuoAgent 实例不是线程安全的。** 实例共享一个 Session（对话状态），并发调用同一实例会产生交错的历史。需要并发处理多个请求时，为每个请求创建独立实例——`DuoAgent.builder()` 构建成本极低。
@@ -105,7 +113,7 @@ agent.call("加上单元测试");           // 第三轮
 ## 访问底层实例（高级用户）
 
 ```java
-Agent rawAgent = agent.getAgent();     // 底层 Agent：followup / steer / inject / cancel / whenIdle
+Agent rawAgent = agent.getAgent();     // 底层 Agent：followup / steer / inject / whenIdle
 Session session = agent.getSession();  // 会话：events() 事件日志 / deriveMessages() / onAppend 订阅
 ```
 

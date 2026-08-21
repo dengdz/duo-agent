@@ -8,7 +8,6 @@ import java.util.List;
 /**
  * 技能目录 Section：将可用技能列表注入系统提示。
  * <p>
- * 对应 DSH 的 available_skills 目录注入机制。
  * 模型看到摘要后调用 skill 工具按需加载完整正文。
  * </p>
  *

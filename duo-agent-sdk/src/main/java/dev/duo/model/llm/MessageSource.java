@@ -5,7 +5,6 @@ import dev.duo.util.CallId;
 /**
  * 消息（或注入内容）的来源。
  * <p>
- * 对应 TS 源码中的 {@code MessageSourceMap}。
  * </p>
  *
  * @author zhangyl

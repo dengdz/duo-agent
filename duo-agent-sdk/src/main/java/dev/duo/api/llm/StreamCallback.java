@@ -4,9 +4,6 @@ import dev.duo.model.llm.StreamChunk;
 
 /**
  * 接收流式模型响应的回调接口。
- * <p>
- * 对应 TS 源码中消费 {@code AsyncIterable<StreamChunk>} 的行为。
- * </p>
  *
  * @author zhangyl
  * @date 2026-08-18

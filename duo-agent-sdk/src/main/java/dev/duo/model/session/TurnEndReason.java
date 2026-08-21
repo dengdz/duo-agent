@@ -5,7 +5,6 @@ import dev.duo.model.llm.LlmFailure;
 /**
  * 一轮对话为什么结束。
  * <p>
- * 对应 TS 源码中的 {@code TurnEndReasonMap}。
  * </p>
  *
  * @author zhangyl

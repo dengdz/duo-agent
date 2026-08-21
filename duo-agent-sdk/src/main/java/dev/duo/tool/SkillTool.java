@@ -14,7 +14,6 @@ import java.util.Objects;
 /**
  * skill 工具：按需加载技能的完整正文。
  * <p>
- * 对应 DSH 的 {@code tool-skill} 包。
  * 模型先从 available_skills 目录看到技能摘要，再调用此工具获取完整指令。
  * </p>
  *

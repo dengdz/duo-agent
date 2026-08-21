@@ -3,7 +3,6 @@ package dev.duo.api.agent;
 /**
  * 两个有序的待处理消息列表之一，由 agent 拥有。
  * <p>
- * 对应 TS 源码中的 {@code InboxTarget}。
  * </p>
  *
  * @author zhangyl

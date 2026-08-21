@@ -4,9 +4,6 @@ import dev.duo.exception.AgentCreationException;
 
 /**
  * Agent 创建工厂——loop 实现通过 {@link AgentRegistry#setFactory(AgentFactory)} 向 registry 注册。
- * <p>
- * 对应 TS 源码中的 {@code AgentFactory} 接口。
- * </p>
  *
  * @author zhangyl
  * @date 2026-08-18

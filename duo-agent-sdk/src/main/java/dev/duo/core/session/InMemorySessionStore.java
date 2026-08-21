@@ -19,7 +19,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 持久化不在此实现——持久化插件订阅 {@code session/event} 并在 flush/dispose 时写入。
  * </p>
  * <p>
- * 对应 TS 源码中的 {@code SessionStore}。
  * </p>
  *
  * @author zhangyl
@@ -100,7 +99,6 @@ public class InMemorySessionStore implements SessionStore {
     /**
      * 从父会话 fork 一个子会话。
      * <p>
-     * 对应 TS 源码中的 {@code SessionStore.fork}。
      * </p>
      */
     @Override

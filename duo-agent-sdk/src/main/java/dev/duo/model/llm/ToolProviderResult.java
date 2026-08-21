@@ -5,7 +5,6 @@ import java.util.List;
 /**
  * 一个组装中可见的工具 schema 及其预限制名称集。
  * <p>
- * 对应 TS 源码中的 {@code ToolProviderResult}。
  * </p>
  *
  * @author zhangyl

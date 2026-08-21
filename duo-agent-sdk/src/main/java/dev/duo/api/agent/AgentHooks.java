@@ -18,8 +18,8 @@ import java.util.function.Supplier;
  * Agent 扩展点（hook）集合：创建时组装、随 Agent 生命周期存活。
  * <p>
  * 每类 hook 独立成链，注册序即链序：先注册者在最外层。
- * 分发语义对应 TS 源码中的 waterfall：调用 {@code chain.proceed()} 委托下游
- * （最终是循环内置行为），不调用即接管/否决；{@code proceed()} 仅可调用一次。
+ * 分发语义：调用 {@code chain.proceed()} 委托下游（最终是循环内置行为），
+ * 不调用即接管/否决；{@code proceed()} 仅可调用一次。
  * hook 抛出的异常会向上传播并导致所在 step 失败（fail loud），不做静默吞没。
  * </p>
  *

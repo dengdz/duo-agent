@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vitepress dev",
-    "build": "vitepress build",
+    "dev": "rm -rf docs && cp -r ../docs . && vitepress dev",
+    "build": "rm -rf docs && cp -r ../docs . && vitepress build",
     "preview": "vitepress preview"
   },
   "devDependencies": {

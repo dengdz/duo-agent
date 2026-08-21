@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * 完整事件流演示 - 完整观察 Agent 的工作过程。
  * <p>
- * stream() 全量透传 session 事件（对齐 DSH 的 session/event 订阅模式）：
+ * stream() 全量透传 session 事件：
  * 思考推理、文本增量、工具调用与结果、step/turn 边界全部可见，
  * 适合渲染 IDE Agent 式的工作过程界面。
  * </p>

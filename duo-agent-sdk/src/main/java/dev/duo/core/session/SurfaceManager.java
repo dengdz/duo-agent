@@ -17,9 +17,6 @@ import static dev.duo.model.session.SessionEventTypes.SURFACE_EVENT_TYPES;
  * 只有 {@code user/message}、{@code assistant/message}、{@code tool/result}
  * 三个事件类型可以进入表面。
  * </p>
- * <p>
- * 对应 TS 源码中的 {@code SurfaceManager} + {@code SessionSurface}。
- * </p>
  *
  * @author zhangyl
  * @date 2026-08-18

@@ -3,8 +3,7 @@ package dev.duo.model.session;
 /**
  * 压缩事务的关闭标记：无论成败都恰好落一条，与 {@link SessionEventCompactionStart} 配对。
  * <p>
- * 对应 TS 源码中的 {@code compaction/end} 事件。非表面事件。
- * 失败时携带 error 摘要，保证未闭合的 start 可被检测（压缩锁语义）。
+ * 非表面事件。失败时携带 error 摘要，保证未闭合的 start 可被检测（压缩锁语义）。
  * </p>
  *
  * @author zhangyl

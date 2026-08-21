@@ -8,8 +8,7 @@ import java.util.List;
 /**
  * 基于字符数的 token 估算器（约 4 字符 = 1 token）。
  * <p>
- * 对应 TS 源码中 {@code token-meter} 的 v1 简化：不做回放精确计价，
- * 只为压缩的阈值与选区提供一致的相对度量。
+ * v1 简化：不做回放精确计价，只为压缩的阈值与选区提供一致的相对度量。
  * </p>
  *
  * @author zhangyl

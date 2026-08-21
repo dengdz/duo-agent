@@ -3,7 +3,6 @@ package dev.duo.api.skill;
 /**
  * 技能来源标识。
  * <p>
- * 对应 DSH 的 {@code SkillSource} 类型。
  * 用于区分技能的来源层级，决定重名时的优先级。
  * </p>
  *

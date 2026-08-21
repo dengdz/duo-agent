@@ -8,7 +8,6 @@ import dev.duo.model.llm.GenerateOptions;
  * 通过 {@link LlmRuntime#registerAdapter(String, LlmAdapter)} 注册实现。
  * </p>
  * <p>
- * 对应 TS 源码中的 {@code LlmAdapter}。
  * </p>
  *
  * @author zhangyl

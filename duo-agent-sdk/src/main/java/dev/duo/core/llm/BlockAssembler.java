@@ -16,7 +16,7 @@ import java.util.Optional;
 
 /**
  * 将原始 {@link StreamChunk} 增量组装为完整的 {@link ContentBlock} 列表
- * 和最终的助手 {@link dev.dsh.model.llm.Message}。
+ * 和最终的助手 {@link dev.duo.model.llm.Message}。
  * <p>
  * Agent loop 在将原始 chunk 记录到日志（用于重放保真度）的同时喂给此组装器，
  * 然后在流结束后读取 {@code blocks()}、{@code usage()}、{@code finish()}。
@@ -27,7 +27,6 @@ import java.util.Optional;
  * 以防止行为异常的适配器增长内存或损坏已完成的块。
  * </p>
  * <p>
- * 对应 TS 源码中的 {@code BlockAssembler}。
  * </p>
  *
  * @author zhangyl

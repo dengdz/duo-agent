@@ -9,9 +9,6 @@ import java.util.function.Function;
 
 /**
  * 系统提示词服务：管理有序 sections、动态上下文、工具 schema 和 prompt 变量。
- * <p>
- * 对应 TS 源码中的 {@code SystemPrompt} 类。
- * </p>
  *
  * @author zhangyl
  * @date 2026-08-18

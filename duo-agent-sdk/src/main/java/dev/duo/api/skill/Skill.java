@@ -3,10 +3,7 @@ package dev.duo.api.skill;
 import java.util.Objects;
 
 /**
- * 技能定义：名称、描述和完整正文。
- * <p>
- * 对应 DSH 的 {@code SkillDefinition}（简化版，v1 裁剪 invocation policy 和 metadata）。
- * </p>
+ * 技能定义：名称、描述和完整正文（v1 裁剪 invocation policy 和 metadata）。
  *
  * @author zhangyl
  * @date 2026-08-19

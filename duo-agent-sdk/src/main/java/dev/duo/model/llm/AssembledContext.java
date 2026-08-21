@@ -3,7 +3,6 @@ package dev.duo.model.llm;
 /**
  * 组装后的动态上下文贡献之一。
  * <p>
- * 对应 TS 源码中的 {@code AssembledContext}。
  * </p>
  *
  * @author zhangyl

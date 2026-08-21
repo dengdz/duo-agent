@@ -10,9 +10,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Agent 服务：跟踪活跃 agent 并委托创建给工厂。
- * <p>
- * 对应 TS 源码中的 {@code AgentRegistry} 类。
- * </p>
  *
  * @author zhangyl
  * @date 2026-08-18

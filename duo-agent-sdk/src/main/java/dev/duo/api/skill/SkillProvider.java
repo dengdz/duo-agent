@@ -6,7 +6,6 @@ import java.util.List;
 /**
  * 技能提供者接口（Capability Seam 的 Service Provider 角色）。
  * <p>
- * 对应 DSH 的 skill provider 体系。
  * 实现者负责从特定来源（文件系统、数据库、网络等）发现和加载技能。
  * </p>
  *

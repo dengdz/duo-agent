@@ -5,8 +5,7 @@ import java.time.Duration;
 /**
  * 压缩配置：阈值、保留尾巴与重试次数。
  * <p>
- * 对应 TS 源码中 {@code compaction-basic} 的 Config（按模型策略的 v1 简化：
- * 全局一份，token 以估算计）。
+ * v1 简化：全局一份（不按模型策略区分），token 以估算计。
  * </p>
  *
  * @author zhangyl

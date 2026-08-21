@@ -3,7 +3,6 @@ package dev.duo.model.llm;
 /**
  * 可序列化的提供方或传输层故障信息。
  * <p>
- * 对应 TS 源码中的 {@code LlmFailure}。
  * </p>
  *
  * @author zhangyl

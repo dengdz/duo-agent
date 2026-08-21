@@ -7,7 +7,7 @@ import dev.duo.model.session.SessionId;
 /**
  * 模型请求失败的恢复决策拦截点。
  * <p>
- * 对应 TS 源码中的 {@code agent/request-error} waterfall：内置行为是"保持失败"
+ * 内置行为是"保持失败"
  * （返回 {@link RequestErrorAction.Fail}，step 以失败结束）。
  * 拥有恢复权的监听器（如重试、上下文溢出压缩）直接返回 {@link RequestErrorAction.Retry}
  * 而不调用 {@code next()}；选择 Retry 时循环会重新派生消息并重新构造请求。

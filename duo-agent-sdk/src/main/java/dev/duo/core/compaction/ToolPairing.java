@@ -11,7 +11,6 @@ import java.util.Set;
  * 工具调用配对平衡检查：压缩切点两侧不得拆散 assistant 的 tool-call
  * 与对应的 tool/result（提供方会拒绝悬挂调用或孤儿结果）。
  * <p>
- * 对应 TS 源码中的 {@code toolPairingBalancedBefore/After}。
  * </p>
  *
  * @author zhangyl

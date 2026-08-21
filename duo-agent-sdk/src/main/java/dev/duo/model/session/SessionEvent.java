@@ -7,7 +7,6 @@ package dev.duo.model.session;
  * 只有表面事件（UserMessage/AssistantMessage/ToolResult）才携带 surfaceOp 和 sourceEventSeqs。
  * </p>
  * <p>
- * 对应 TS 源码中的 {@code SessionEvent}。
  * </p>
  *
  * @author zhangyl

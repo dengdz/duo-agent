@@ -21,7 +21,6 @@ import java.util.stream.Stream;
 /**
  * 文件系统技能提供者：从目录扫描 SKILL.md / *.md 文件。
  * <p>
- * 对应 DSH 的 {@code skill-filesystem} 包。
  * 解析 YAML frontmatter，校验 name 格式，缓存候选列表。
  * 线程安全：discover/load 同步保护缓存（discover 是一次性扫描，无热更新）。
  * </p>

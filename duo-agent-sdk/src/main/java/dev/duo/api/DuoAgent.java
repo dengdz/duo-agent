@@ -1,6 +1,8 @@
 package dev.duo.api;
 
 import dev.duo.api.agent.Agent;
+import dev.duo.api.agent.AgentCancelCause;
+import dev.duo.api.agent.CancelOptions;
 import dev.duo.core.session.Session;
 import dev.duo.model.session.SessionEvent;
 import dev.duo.model.session.TurnEndReason;
@@ -145,8 +147,9 @@ public interface DuoAgent {
      *   <li><b>背压</b> - 通过 {@code request(n)} 控制拉取节奏；消费慢于生产时
      *       事件在内部缓冲（上限 8192 个，推理模型的超长思考痕迹可能触达），
      *       溢出即以 {@code onError} 终止订阅</li>
-     *   <li><b>取消语义</b> - {@code cancel()} 停止推送并释放资源，
-     *       但底层对话轮会继续执行完毕（不中断模型推理，仍消耗一次 API 调用）</li>
+     *   <li><b>取消语义</b> - 订阅侧 {@code subscription.cancel()} 仅停止推送，
+     *       底层对话轮继续执行完毕；要中断执行本身（断开 HTTP、终止进程）
+     *       使用 {@link #cancel(AgentCancelCause)}</li>
      *   <li><b>单订阅</b> - 每次调用返回的 Publisher 仅支持订阅一次，
      *       重复订阅将收到 {@code onError}</li>
      *   <li><b>线程模型</b> - {@code onNext} 等回调可能在驱动线程上执行，
@@ -164,6 +167,35 @@ public interface DuoAgent {
      * @see TurnEndReason
      */
     Flow.Publisher<SessionEvent> stream(String message);
+
+    /**
+     * 取消当前对话轮 - 中断 LLM 流、终止工具进程并立即返回。
+     * <p>
+     * 典型场景是聊天界面的"停止生成"按钮：{@link #stream} 发起对话后，
+     * 从其他线程调用本方法即可。被取消的 turn 以 {@code TurnEndReason.Aborted}
+     * 收尾；阻塞中的 {@link #call} 立刻返回提示文本，订阅中的 {@link #stream}
+     * 以 {@code onComplete} 结束。
+     * </p>
+     * <p>
+     * 取消只终止当前轮，不销毁 Agent——下一次调用是全新的一轮。
+     * 重复调用安全：取消原因首写固化，后续调用是幂等空操作。
+     * </p>
+     *
+     * @param cause 取消原因
+     */
+    void cancel(AgentCancelCause cause);
+
+    /**
+     * 取消当前对话轮，并指定是否保留 Inbox 中排队/转向中的消息。
+     * <p>
+     * 默认取消会清空 Inbox；传入 {@code new CancelOptions(true)} 保留它们，
+     * 取消的 turn 收尾后自动开新 turn 处理这些消息。
+     * </p>
+     *
+     * @param cause   取消原因
+     * @param options 取消选项
+     */
+    void cancel(AgentCancelCause cause, CancelOptions options);
 
     /**
      * 获取底层 Agent 实例（高级用户）。

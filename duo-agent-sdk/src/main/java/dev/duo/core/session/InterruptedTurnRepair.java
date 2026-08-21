@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 崩溃遗留的 open turn 闭合器（对应 TS 源码中的 {@code interruptedTurnClosers}）。
+ * 崩溃遗留的 open turn 闭合器。
  * <p>
  * 扫描事件日志的 turn/step 状态与未闭合工具调用，为崩溃时未关闭的末尾 turn
  * 合成闭合事件：每个悬挂工具调用一个 {@code tool/result}（isError，文案区分

@@ -10,7 +10,6 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * LLM 服务：适配器注册表 + 流式模型调用 API。
  * <p>
- * 对应 TS 源码中的 {@code LlmRuntime}。
  * </p>
  *
  * @author zhangyl

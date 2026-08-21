@@ -6,7 +6,6 @@ import java.util.Map;
 /**
  * 组装后的模型输入。sections 和 contexts 在渲染前保持未插值状态。
  * <p>
- * 对应 TS 源码中的 {@code PromptAssembly}。
  * </p>
  *
  * @author zhangyl

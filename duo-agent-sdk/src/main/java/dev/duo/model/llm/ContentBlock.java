@@ -5,7 +5,6 @@ import dev.duo.util.CallId;
 /**
  * 消息内容的原子单元——内容块。
  * <p>
- * 对应 TS 源码中的 {@code ContentBlockMap}。
  * 如需新增块类型，扩展此 sealed 层次结构即可。
  * </p>
  *

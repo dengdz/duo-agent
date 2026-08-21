@@ -81,7 +81,7 @@ agent.stream("分析代码").subscribe(new Flow.Subscriber<>() {
 | 原因 | 含义 |
 |------|------|
 | `Completed` | 正常完成 |
-| `Aborted` | 被取消（0.4.0 起：`Agent.cancel()` 中断当前 turn，详见 [取消与中断](../05-reference/limitations.md#取消与中断)） |
+| `Aborted` | 被取消（0.4.0 起：`Agent.cancel()` 中断当前 turn，详见[取消与中断](cancellation.md)） |
 | `Blocked` | 预步被拒（pre-step hook 拒绝了输入） |
 | `Error` | 失败（结构化 `LlmFailure`：消息/错误码/HTTP 状态） |
 | `MaxTokens` | 输出达到 token 上限 |
@@ -96,7 +96,7 @@ agent.stream("分析代码").subscribe(new Flow.Subscriber<>() {
 | **冷发布者** | 调用 `stream()` 不发任何请求；`subscribe()` 时才发起对话。不订阅零消耗 |
 | **单订阅** | 每个 Publisher 仅支持订阅一次，重复订阅收到 `onError`。需要重试请重新调用 `stream()` |
 | **背压** | `request(n)` 控制拉取节奏；消费慢于生产时事件在内部缓冲，不丢失 |
-| **取消** | `subscription.cancel()` 停止推送；`Agent.cancel()` 中断执行（断开 HTTP、终止进程），详见 [取消与中断](../05-reference/limitations.md#取消与中断) |
+| **取消** | `subscription.cancel()` 停止推送；`Agent.cancel()` 中断执行（断开 HTTP、终止进程），详见[取消与中断](cancellation.md) |
 | **完成** | `turn/end` 事件即整轮对话的权威结束信号，随后 `onComplete` |
 | **慢消费者保护** | 内部缓冲上限 8192 条，溢出即 `onError` 终止订阅 |
 | **线程模型** | `onNext` 等回调可能在驱动线程上执行，订阅者需保证自身处理的线程安全 |

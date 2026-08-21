@@ -25,9 +25,6 @@ import java.util.function.Consumer;
  * 消息历史由日志派生，日志是唯一的事实源。
  * 模型可见 = 已记日志。
  * </p>
- * <p>
- * 对应 TS 源码中的 {@code Session} 类。
- * </p>
  *
  * @author zhangyl
  * @date 2026-08-18
@@ -246,7 +243,6 @@ public class Session {
     /**
      * 将单个事件投影为 LLM 消息。
      * <p>
-     * 对应 TS 源码中的 {@code deriveEventMessage}。
      * </p>
      */
     static Message deriveEventMessage(SessionEvent event) {

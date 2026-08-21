@@ -126,7 +126,7 @@ public class CancellationDemo {
         // 等待 2 秒后取消
         Thread.sleep(2000);
         System.out.println("\n[2s] 发起取消...");
-        agent.cancel(new AgentCancelCause.User(), new CancelOptions(false));
+        duoAgent.cancel(new AgentCancelCause.User(), new CancelOptions(false));
 
         // 等待收敛
         agent.whenIdle();
@@ -212,7 +212,7 @@ public class CancellationDemo {
         // 等待 bash 真正启动并执行（3 秒足够模型推理 + bash 启动）
         Thread.sleep(3000);
         System.out.println("[3s] 发起取消（bash sleep 30 应正在运行）...");
-        agent.cancel(new AgentCancelCause.User(), new CancelOptions(false));
+        duoAgent.cancel(new AgentCancelCause.User(), new CancelOptions(false));
 
         // 等待收敛
         agent.whenIdle();
@@ -324,7 +324,7 @@ public class CancellationDemo {
         
         Thread.sleep(500);
         System.out.println("[2.5s] 发起取消（keepInbox=true）...");
-        agent.cancel(new AgentCancelCause.User(), new CancelOptions(true));
+        duoAgent.cancel(new AgentCancelCause.User(), new CancelOptions(true));
 
         // 等待收敛
         agent.whenIdle();

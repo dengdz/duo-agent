@@ -3,7 +3,6 @@ package dev.duo.model.llm;
 /**
  * 系统提示词的一个贡献片段。
  * <p>
- * 对应 TS 源码中的 {@code PromptSection}。
  * </p>
  *
  * @author zhangyl

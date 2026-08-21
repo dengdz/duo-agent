@@ -9,8 +9,6 @@ import java.util.Objects;
 /**
  * 不可变消息的工厂方法。
  * <p>
- * 对应 TS 源码中的 {@code createUserMessage}、{@code createAssistantMessage}、
- * {@code createToolResultMessage}。
  * 所有返回的消息都是不可变的（内容列表不可修改）。
  * </p>
  *

@@ -33,7 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * 压缩 hook：step 间压力触发的表面压缩（对应 TS 源码中的 {@code compaction-basic}）。
+ * 压缩 hook：step 间压力触发的表面压缩。
  * <p>
  * 全链路外挂在 {@link PreStepHook} 上：估算表面 token，超过阈值时把
  * [开头, 中段切点] 的表面范围替换为一条摘要 checkpoint 消息（SurfaceOp.Replace）。

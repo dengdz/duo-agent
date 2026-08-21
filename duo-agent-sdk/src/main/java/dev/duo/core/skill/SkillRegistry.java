@@ -17,7 +17,6 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 技能注册表：合并多个 Provider，按 rank 裁决重名。
  * <p>
- * 对应 DSH 的 skill registry 逻辑。
  * 线程安全：候选缓存使用 ConcurrentHashMap，重建过程在 synchronized 方法内完成。
  * </p>
  *

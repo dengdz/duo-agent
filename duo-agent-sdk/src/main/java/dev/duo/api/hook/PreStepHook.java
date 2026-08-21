@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * step 进入前的决策拦截点。
  * <p>
- * 对应 TS 源码中的 {@code agent/pre-step} waterfall：内置行为是"以已认领的消息原样进入 step"。
+ * 内置行为是"以已认领的消息原样进入 step"。
  * 监听器可改写进入的消息（返回新的 {@link PreStepDecision.Enter}），或直接拒绝
  * （返回 {@link PreStepDecision.Reject}，被拒的 turn 以 Blocked 结束且不消耗模型调用）。
  * 消费示例：上下文压缩在压力超限时改写消息批次。

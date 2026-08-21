@@ -2,7 +2,6 @@ package dev.duo.model.session;
 
 /**
  * 持久化的取消原因，包含导入时未携带原始原因的粗粒度记录。
- * 对应 TS 源码中的 {@code TurnEndCancelCause}。
  *
  * @author zhangyl
  * @date 2026-08-18

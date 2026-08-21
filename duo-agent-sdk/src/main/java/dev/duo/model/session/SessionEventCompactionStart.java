@@ -3,7 +3,7 @@ package dev.duo.model.session;
 /**
  * 压缩事务的开启标记：持久锁，直到配对的 {@link SessionEventCompactionEnd}。
  * <p>
- * 对应 TS 源码中的 {@code compaction/start} 事件。非表面事件。
+ * 非表面事件。
  * </p>
  *
  * @author zhangyl

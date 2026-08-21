@@ -10,7 +10,6 @@ import java.util.Map;
 /**
  * 工具注册表服务。
  * <p>
- * 对应 TS 源码中的 {@code ctx.tools}。
  * </p>
  *
  * @author zhangyl

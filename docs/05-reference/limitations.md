@@ -31,11 +31,9 @@
 
 ### 取消与中断
 
-> **0.4.0 完整实现**：双通道取消信号（`CancellationSignal` + `Thread.interrupt()`）贯穿调用链，详见 [ADR_004](../../ADR_004_CANCELLATION_INTERRUPT.md)。
+取消功能 0.4.0 起完整可用，用法见[取消与中断指南](../02-guide/cancellation.md)。仅一处限制：
 
-- **取消会中断 LLM stream**：`Agent.cancel()` 调用断连监听器，HTTP 客户端取消挂起的流请求（已调度的工具执行同步收到信号与线程中断）
-- **已调度工具执行不能强制终止**：除 bash（两级 SIGTERM/SIGKILL），自定义工具需自行在 `executor` 内部检查 `execution.cancellation().isCancelled()` 并提前返回或抛 `TurnCancelledException`
-- **取消产生两层 Aborted 哨兵结果**：未调度的 tool_call 配对 `ABORTED_BEFORE_DISPATCH`（无副作用）；已调度但中断的配对 `ABORTED`（可能有副作用）。哨兵事件维持协议要求的 tool_call/tool_result 配对
+- **自定义工具不能被强制终止**：取消通过协作式检查点传播，自定义工具需在 `executor` 内部检查 `execution.cancellation()` 并提前返回或抛 `TurnCancelledException`，否则要等工具自然执行完毕（bash 例外：框架直接两级 kill 进程树）
 
 ### 已定义未接线的事件与类型
 

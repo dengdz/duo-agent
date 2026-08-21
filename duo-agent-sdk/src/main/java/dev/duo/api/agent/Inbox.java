@@ -16,9 +16,6 @@ import java.util.Map;
  * {@code next-step}（等待下一个 step 边界的输入）。
  * 所有变更先记录到 Session 日志，再更新内存投影。
  * </p>
- * <p>
- * 对应 TS 源码中的 {@code Inbox} 类。
- * </p>
  *
  * @author zhangyl
  * @date 2026-08-18

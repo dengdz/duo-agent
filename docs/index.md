@@ -71,5 +71,5 @@ String response = agent.call("列出当前目录的 Java 文件");
 ## 更多资源
 
 - [项目 README](https://github.com/dengdz/duo-agent) —— 特性亮点
-- [示例程序](https://github.com/dengdz/duo-agent/tree/main/duo-agent-example) —— 18 个可运行示例
-- 297 个单元测试覆盖全部核心功能
+- [示例程序](https://github.com/dengdz/duo-agent/tree/main/duo-agent-example) —— 20 个可运行示例
+- 298 个单元测试覆盖全部核心功能

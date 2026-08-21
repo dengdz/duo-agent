@@ -78,7 +78,7 @@ HTTP 整体：max(llmTimeout, reasoningTimeout) + 1min（防 SSE 长流被掐，
 | 原因 | 触发 |
 |------|------|
 | `Completed` | 模型给出无工具调用的回答 |
-| `Aborted(cause)` | `Agent.cancel()` 中断当前 turn（详见 [ADR_004](../../ADR_004_CANCELLATION_INTERRUPT.md)） |
+| `Aborted(cause)` | `Agent.cancel()` 中断当前 turn（详见[取消与中断指南](../02-guide/cancellation.md)） |
 | `Blocked` | pre-step hook 拒绝输入 |
 | `Error(LlmFailure)` | 模型调用最终失败（重试耗尽等） |
 | `MaxTokens` | 输出达到 token 上限 |
@@ -91,7 +91,7 @@ HTTP 整体：max(llmTimeout, reasoningTimeout) + 1min（防 SSE 长流被掐，
 > - 哨兵结果配对：`ABORTED` / `ABORTED_BEFORE_DISPATCH`
 > - Turn 收尾：记录 `Aborted(reason)`
 > 
-> 详见 [ADR_004](../../ADR_004_CANCELLATION_INTERRUPT.md) 和 [取消与中断限制](../05-reference/limitations.md#取消与中断)
+> 详见[取消与中断指南](../02-guide/cancellation.md)
 
 ## 输入路由（Inbox）
 
@@ -105,4 +105,4 @@ agent.whenIdle();      // 等待全部活动静止
 
 `chat()` 等门面方法内部即 `followup + whenIdle`。
 
-`AgentCancelCause` 五种：`User` / `Parent` / `Hook(reason)` / `Disposed` / `Legacy`。
+`AgentCancelCause` 四种：`User` / `Parent` / `Hook(reason)` / `Disposed`（事件回放的旧日志兼容另有 `TurnEndCancelCause.Legacy`）。

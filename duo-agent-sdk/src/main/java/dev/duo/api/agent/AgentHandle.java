@@ -3,7 +3,6 @@ package dev.duo.api.agent;
 /**
  * 拥有的 Agent 加上其处置器，由 {@link AgentRegistry#create(CreateAgentOptions)} 返回。
  * <p>
- * 对应 TS 源码中的 {@code AgentHandle}。
  * </p>
  *
  * @author zhangyl

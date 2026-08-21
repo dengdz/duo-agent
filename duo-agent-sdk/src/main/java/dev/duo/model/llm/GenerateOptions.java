@@ -5,7 +5,6 @@ import java.util.List;
 /**
  * 一次完整的模型请求，已完全组装。
  * <p>
- * 对应 TS 源码中的 {@code GenerateOptions}。
  * </p>
  *
  * @author zhangyl

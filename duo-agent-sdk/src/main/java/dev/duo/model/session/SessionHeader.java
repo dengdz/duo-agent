@@ -3,7 +3,6 @@ package dev.duo.model.session;
 /**
  * 不可变的存储元数据，保存在会话事件日志之外。
  * <p>
- * 对应 TS 源码中的 {@code SessionHeader}。
  * </p>
  *
  * @author zhangyl

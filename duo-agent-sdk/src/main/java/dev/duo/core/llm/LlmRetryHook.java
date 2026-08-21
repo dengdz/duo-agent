@@ -17,8 +17,8 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * 内置的模型请求重试 hook：指数退避 + 抖动，尊重提供方 Retry-After。
  * <p>
- * 对应 TS 源码中的 {@code dsh-llm-retry} 插件（挂在 {@code agent/request-error}
- * waterfall 上）：适配器只报告结构化失败，重试在循环扩展点执行。
+ * 挂在 {@code agent/request-error} waterfall 上：适配器只报告结构化失败，
+ * 重试在循环扩展点执行。
  * 重试计数按 (agent, turn, step) 隔离——同一 step 的连续失败累计，
  * step 推进后自然重置；可重试的失败为 HTTP 5xx/429、超时与传输错误。
  * </p>

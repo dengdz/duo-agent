@@ -8,7 +8,7 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * 持久化会话存储契约（对应 TS 源码中的 {@code ctx.sessionPersistence} seam）。
+ * 持久化会话存储契约。
  * <p>
  * 后端以事件溯源方式存储 {@link SessionEvent} 日志，不可回放的
  * {@link SessionHeader} 元数据单独携带。{@link #append} 返回即已落盘；

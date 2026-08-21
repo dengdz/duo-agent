@@ -6,9 +6,6 @@ import dev.duo.model.session.SessionId;
 
 /**
  * 公开的活跃 Agent 句柄。
- * <p>
- * 对应 TS 源码中的 {@code Agent} 接口。
- * </p>
  *
  * @author zhangyl
  * @date 2026-08-18

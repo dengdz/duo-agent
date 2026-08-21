@@ -11,9 +11,8 @@ import java.util.Set;
 /**
  * grep/glob 搜索工具的共享支撑：遍历排除目录、二进制文件探测、显示路径转换、include glob 校验。
  * <p>
- * 对应 DSH {@code tool-fs-search} 的 search-core 遍历约定（v1 纯 Java 实现，
- * 不 spawn ripgrep）：VCS 元数据目录不进入；疑似二进制文件跳过；结果路径相对
- * 工作目录显示。
+ * 遍历约定（v1 纯 Java 实现，不 spawn ripgrep）：VCS 元数据目录不进入；
+ * 疑似二进制文件跳过；结果路径相对工作目录显示。
  * </p>
  *
  * @author zhangyl
@@ -84,7 +83,7 @@ final class SearchSupport {
     }
 
     /**
-     * 编译单个正向 include glob（DSH 语义）：拒绝空串、{@code !} 前缀与顶层逗号列表，
+     * 编译单个正向 include glob：拒绝空串、{@code !} 前缀与顶层逗号列表，
      * 允许 {@code {a,b}} 交替。只匹配文件名，不匹配整路径。
      * @param include 待校验的 glob
      * @return 编译好的文件名匹配器

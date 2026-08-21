@@ -10,7 +10,6 @@ import dev.duo.util.CallId;
  * 工具参数保持原始 JSON 字符串。
  * </p>
  * <p>
- * 对应 TS 源码中的 {@code StreamChunk}。
  * </p>
  *
  * @author zhangyl

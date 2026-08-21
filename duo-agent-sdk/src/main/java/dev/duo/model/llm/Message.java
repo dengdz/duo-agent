@@ -7,7 +7,6 @@ import java.util.List;
 /**
  * 不可变消息表示，在传递、持久化历史和模型请求之间共享。
  * <p>
- * 对应 TS 源码中的 {@code Message}。
  * </p>
  *
  * @author zhangyl

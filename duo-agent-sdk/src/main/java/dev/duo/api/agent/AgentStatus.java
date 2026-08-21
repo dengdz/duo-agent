@@ -7,7 +7,6 @@ package dev.duo.api.agent;
  * {@code running} 从唤醒输入开始可取消的 pre-step 处理开始，
  * 持续到驱动排空、关闭或检查点 turn。
  * </p>
- * 对应 TS 源码中的 {@code AgentStatus}。
  *
  * @author zhangyl
  * @date 2026-08-18

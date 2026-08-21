@@ -23,7 +23,7 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
- * JSONL 文件持久化后端（对应 TS 源码中的 {@code dsh-session-persistence-jsonl}）。
+ * JSONL 文件持久化后端。
  * <p>
  * 文件布局：{@code {baseDir}/{base64url(sessionId)}.jsonl}；首行为会话头
  * （type = "session"），其后每行一个事件。SessionId 经 Base64url 编码后再入路径，
@@ -42,7 +42,7 @@ public final class JsonlSessionPersistence implements SessionPersistence, AutoCl
             org.slf4j.LoggerFactory.getLogger(JsonlSessionPersistence.class);
 
     private static final String FILE_SUFFIX = ".jsonl";
-    /** write-behind 批处理的最大等待时长（对应 dsh 的 DEFAULT_WRITE_BATCH_MAX_DELAY_MS）。 */
+    /** write-behind 批处理的最大等待时长。 */
     private static final long WRITE_BATCH_DELAY_MS = 200;
 
     private final Path baseDir;
@@ -133,7 +133,7 @@ public final class JsonlSessionPersistence implements SessionPersistence, AutoCl
         // 冷恢复：建立写入器（seq 从闭合后日志尾续；仅 header 的空日志从 0 起）；
         // 崩溃遗留的 open turn 持久化闭合。
         // 活会话（writer 已存在）二次 load 只读返回磁盘快照——内存 pending 领先于磁盘，
-        // 此时不得基于磁盘视图做修复写入（dsh 语义：不得 crash-repair 活会话）。
+        // 此时不得基于磁盘视图做修复写入（不得 crash-repair 活会话）。
         var closers = events.isEmpty() ? List.<SessionEvent>of() : InterruptedTurnRepair.closersFor(events);
         var writer = writers.computeIfAbsent(id,
                 ignored -> new SessionWriter(header, file,

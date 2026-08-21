@@ -5,7 +5,7 @@ import java.time.Duration;
 /**
  * 可合并扩展的 Agent 创建选项。
  * <p>
- * 对应 TS 源码中的 {@code AgentOptions}。hook 集合在创建时组装、随 Agent 生命周期存活。
+ * hook 集合在创建时组装、随 Agent 生命周期存活。
  * </p>
  *
  * @author zhangyl

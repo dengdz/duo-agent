@@ -22,11 +22,10 @@ import java.util.stream.Stream;
 /**
  * glob 工具：按路径模式发现文件。
  * <p>
- * 对应 DSH {@code tool-fs-search} 的 glob（v1 纯 Java 实现）：结果只含文件不含目录，
- * 按修改时间排序（新在前）；内联最多 {@value #MAX_RESULTS} 条，超出报告总数并提示
- * 缩小范围。不含分隔符的模式匹配任意深度的文件名（如 {@code *.java} 匹配整棵树），
- * 含分隔符的模式匹配相对搜索根的路径（如 {@code src/**&#47;*Test.java}）。
- * VCS 元数据目录排除。
+ * 结果只含文件不含目录，按修改时间排序（新在前）；内联最多 {@value #MAX_RESULTS} 条，
+ * 超出报告总数并提示缩小范围。不含分隔符的模式匹配任意深度的文件名
+ * （如 {@code *.java} 匹配整棵树），含分隔符的模式匹配相对搜索根的路径
+ * （如 {@code src/**&#47;*Test.java}）。VCS 元数据目录排除。
  * </p>
  *
  * @author zhangyl
@@ -36,7 +35,7 @@ public class GlobTool {
 
     private static final Logger logger = LoggerFactory.getLogger(GlobTool.class);
 
-    /** 单次调用内联返回的最大路径数（DSH 默认 100）。 */
+    /** 单次调用内联返回的最大路径数。 */
     private static final int MAX_RESULTS = 100;
 
     private static final String TOOL_NAME = "glob";
@@ -80,7 +79,7 @@ public class GlobTool {
             return new ToolExecutionResult("错误：目录不存在: " + root);
         }
 
-        // DSH 语义适配：不含分隔符的模式匹配任意深度的文件名；
+        // 不含分隔符的模式匹配任意深度的文件名；
         // 含分隔符的模式匹配相对搜索根的路径。
         // 注意 Java glob 的 "**/x" 不匹配根层文件，故文件名模式直接对 getFileName() 匹配
         var fileNameOnly = patternStr.indexOf('/') < 0;

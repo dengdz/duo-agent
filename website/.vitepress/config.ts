@@ -9,6 +9,8 @@ export default defineConfig({
   description: '零依赖的 Java 21 AI Agent SDK',
   lang: 'zh-CN',
   base,
+  // 内容源是 website/docs：CI 构建前从仓库根 docs/ 复制（见 docs.yml），
+  // 本地开发用 symlink（website/docs -> ../docs）指向同一份源文件
   srcDir: 'docs',
   // docs/ 中存在指向仓库根的相对链接（../README.md、../duo-agent-example/...），
   // 网站上无对应路由：放行死链检查（GitHub 上仍可正常点击）
@@ -35,9 +37,11 @@ export default defineConfig({
         items: [
           { text: '对话 API', link: '/02-guide/chat-api' },
           { text: '流式输出', link: '/02-guide/streaming' },
+          { text: '多厂商接入', link: '/02-guide/multi-provider' },
           { text: '内置工具', link: '/02-guide/tools-builtin' },
           { text: '自定义工具', link: '/02-guide/tools-custom' },
           { text: '推理模型', link: '/02-guide/reasoning-models' },
+          { text: '取消与中断', link: '/02-guide/cancellation' },
           { text: 'Spring Boot SSE 桥接', link: '/02-guide/spring-sse' }
         ]
       },

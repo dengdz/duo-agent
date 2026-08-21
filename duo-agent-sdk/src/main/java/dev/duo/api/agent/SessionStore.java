@@ -9,12 +9,11 @@ import java.util.List;
 /**
  * 会话存储契约（{@code ctx.sessions}）。
  * <p>
- * 对应 TS 源码中的 {@code SessionStore}。
- * 内存实现见 {@code dev.dsh.core.session.InMemorySessionStore}；
- * 持久化实现将订阅 {@code session/event} 并在 flush/dispose 时写入。
+ * 内存实现直接持有活跃会话表；持久化实现将订阅 {@code session/event}
+ * 并在 flush/dispose 时写入。
  * </p>
  * <p>
- * 注意：方法签名使用 {@code dev.dsh.core.session.Session}——会话是库的领域类型，
+ * 注意：方法签名直接使用领域类型 {@link Session}——会话是库的领域类型，
  * 契约层对其引用属于明示豁免，待持久化改造时一并接口化。
  * </p>
  *

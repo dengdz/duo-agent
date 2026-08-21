@@ -3,7 +3,6 @@ package dev.duo.api.agent;
 /**
  * 模型请求恢复操作。
  * <p>
- * 对应 TS 源码中的 {@code RequestErrorAction}。
  * </p>
  *
  * @author zhangyl
